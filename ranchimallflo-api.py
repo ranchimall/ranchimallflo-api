@@ -83,7 +83,7 @@ def getcontractparticipants():
         return jsonify(result='error', details='Smart Contract\'s address hasn\'t been passed')
 
     contractName = '{}-{}.db'.format(name.strip(),contractAddress.strip())
-    filelocation = os.path.join(dbfolder,'smartContracts', ContractName)
+    filelocation = os.path.join(dbfolder,'smartContracts', contractName)
 
     if os.path.isfile(filelocation):
         #Make db connection and fetch data
