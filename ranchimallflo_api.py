@@ -13,7 +13,7 @@ CORS(app)
 
 # FLO TOKEN APIs
 
-@app.route('/api/v1.0/getTokenlist', methods=['GET'])
+@app.route('/api/v1.0/gettokenlist', methods=['GET'])
 def gettokenlist():
     filelist = []
     for item in os.listdir(os.path.join(dbfolder,'tokens')):
@@ -198,7 +198,7 @@ def getcontractparticipants():
     else:
         return jsonify(result='error', details='Smart Contract with the given name doesn\'t exist')
 
-@app.route('/api/v1.0/getParticipantDetails', methods=['GET'])
+@app.route('/api/v1.0/getparticipantdetails', methods=['GET'])
 def getParticipantDetails():
     floaddress = request.args.get('floaddress')
 
