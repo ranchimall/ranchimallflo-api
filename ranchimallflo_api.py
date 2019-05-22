@@ -13,6 +13,15 @@ CORS(app)
 
 # FLO TOKEN APIs
 
+@app.route('/api/v1.0/getTokenlist', methods=['GET'])
+def gettokenlist():
+    filelist = []
+    for item in os.listdir(os.path.join(dbfolder,'tokens')):
+        if os.path.isfile(os.path.join(dbfolder, 'tokens', item)):
+            filelist.append(item[:-3])
+
+    return jsonify(tokens = filelist, result='ok')
+
 @app.route('/api/v1.0/getaddressbalance', methods=['GET'])
 def getaddressbalance():
     address = request.args.get('address')
