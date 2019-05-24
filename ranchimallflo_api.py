@@ -22,6 +22,7 @@ def gettokenlist():
 
     return jsonify(tokens = filelist, result='ok')
 
+
 @app.route('/api/v1.0/getaddressbalance', methods=['GET'])
 def getaddressbalance():
     address = request.args.get('address')
@@ -117,6 +118,7 @@ def getcontractlist():
 
     return jsonify(smartContracts = filelist, result='ok')
 
+
 @app.route('/api/v1.0/getsmartContractinfo', methods=['GET'])
 def getcontractinfo():
     name = request.args.get('name')
@@ -198,27 +200,24 @@ def getcontractparticipants():
     else:
         return jsonify(result='error', details='Smart Contract with the given name doesn\'t exist')
 
+
 @app.route('/api/v1.0/getparticipantdetails', methods=['GET'])
 def getParticipantDetails():
     floaddress = request.args.get('floaddress')
 
-    if name is floaddress:
+    if floaddress is None:
         return jsonify(result='error', details='FLO address hasn\'t been passed')
+    dblocation = os.path.join(dbfolder,'system.db')
 
-    filelocation = os.path.join(dbfolder,'system.db')
-
-    if os.path.isfile(filelocation):
+    if os.path.isfile(dblocation):
         #Make db connection and fetch data
-        conn = sqlite3.connect(filelocation)
+        conn = sqlite3.connect(dblocation)
         c = conn.cursor()
-        c.execute(
-            "SELECT id, participantAddress,contractName, contractAddress, tokenAmount, transactionHash FROM contractParticipantMapping where participantAddress=="+floaddress)
+        queryString = "SELECT id, participantAddress,contractName, contractAddress, tokenAmount, transactionHash FROM contractParticipantMapping where participantAddress=='"+floaddress+"'"
+        c.execute(queryString)
         result = c.fetchall()
         conn.close()
-
-        if len(result!=0):
-            returnval = {}
-            returnval['participantAddress'] = result[0][1]
+        if len(result)!=0:
             participationDetailsList = []
             for row in result:
                 detailsDict = {}
@@ -227,8 +226,7 @@ def getParticipantDetails():
                 detailsDict['tokenAmount'] = row[4]
                 detailsDict['transactionHash'] = row[5]
                 participationDetailsList.append(detailsDict)
-            returnval['participatedContracts'] = participationDetailsList
-            return jsonify(result='ok', participantInfo=returnval)
+            return jsonify(result='ok', participantAddress=result[0][1] , participatedContracts=participationDetailsList)
         else:
             return jsonify(result='error', details='Address hasn\'t participanted in any other contract')
     else:
@@ -240,5 +238,5 @@ def test():
     return render_template('test.html')
 
 if __name__ == "__main__":
-    app.run(debug=True)
+    app.run(debug=True, port=5009)
 
