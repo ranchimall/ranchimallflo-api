@@ -212,15 +212,25 @@ def getParticipantDetails():
         conn = sqlite3.connect(filelocation)
         c = conn.cursor()
         c.execute(
-            'SELECT id,participantAddress, tokenAmount, userChoice FROM contractparticipants')
+            "SELECT id, participantAddress,contractName, contractAddress, tokenAmount, transactionHash FROM contractParticipantMapping where participantAddress=="+floaddress)
         result = c.fetchall()
         conn.close()
-        returnval = {}
-        for row in result:
-            returnval[row[0]] = [row[1],row[2],row[3]]
 
-        return jsonify(result='ok', participantInfo=returnval)
-
+        if len(result!=0):
+            returnval = {}
+            returnval['participantAddress'] = result[0][1]
+            participationDetailsList = []
+            for row in result:
+                detailsDict = {}
+                detailsDict['contractName']= row[2]
+                detailsDict['contractAddress'] = row[3]
+                detailsDict['tokenAmount'] = row[4]
+                detailsDict['transactionHash'] = row[5]
+                participationDetailsList.append(detailsDict)
+            returnval['participatedContracts'] = participationDetailsList
+            return jsonify(result='ok', participantInfo=returnval)
+        else:
+            return jsonify(result='error', details='Address hasn\'t participanted in any other contract')
     else:
         return jsonify(result='error', details='Smart Contract with the given name doesn\'t exist')
 
