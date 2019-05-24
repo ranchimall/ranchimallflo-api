@@ -258,7 +258,7 @@ def getParticipantDetails():
                     returnval['tokenAmountDeposited'] = totalAmount
 
                     conn.close()
-                    return jsonify(result='ok', address=result[0][1], type='contract', contractInfo=returnval)
+                    return jsonify(result='ok', address=floaddress, type='contract', contractInfo=returnval)
 
         # Check if its a participant address
         queryString = "SELECT id, participantAddress,contractName, contractAddress, tokenAmount, transactionHash FROM contractParticipantMapping where participantAddress=='"+floaddress+"'"
@@ -274,7 +274,7 @@ def getParticipantDetails():
                 detailsDict['tokenAmount'] = row[4]
                 detailsDict['transactionHash'] = row[5]
                 participationDetailsList.append(detailsDict)
-            return jsonify(result='ok', address=result[0][1], type='participant' , participatedContracts=participationDetailsList)
+            return jsonify(result='ok', address=floaddress, type='participant' , participatedContracts=participationDetailsList)
         else:
             return jsonify(result='error', details='Address hasn\'t participanted in any other contract')
     else:
