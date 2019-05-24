@@ -209,10 +209,58 @@ def getParticipantDetails():
         return jsonify(result='error', details='FLO address hasn\'t been passed')
     dblocation = os.path.join(dbfolder,'system.db')
 
+    print(dblocation)
+
     if os.path.isfile(dblocation):
-        #Make db connection and fetch data
+        # Make db connection and fetch data
         conn = sqlite3.connect(dblocation)
         c = conn.cursor()
+
+        # Check if its a contract address
+        c.execute("select contractAddress from activecontracts")
+        activeContracts = c.fetchall()
+        activeContracts = list(zip(*activeContracts))
+
+        if floaddress in list(activeContracts[0]):
+            c.execute("select contractName from activecontracts where contractAddress=='"+floaddress+"'")
+            name = c.fetchall()
+
+            if len(name) != 0:
+                contractName = '{}-{}.db'.format(name[0][0].strip(),floaddress.strip())
+                filelocation = os.path.join(dbfolder,'smartContracts', contractName)
+
+                if os.path.isfile(filelocation):
+                    #Make db connection and fetch data
+                    conn = sqlite3.connect(filelocation)
+                    c = conn.cursor()
+                    c.execute(
+                        'SELECT attribute,value FROM contractstructure')
+                    result = c.fetchall()
+
+                    returnval = {'exitconditions': []}
+                    temp = 0
+                    for row in result:
+                        if row[0] == 'exitconditions':
+                            if temp == 0:
+                                returnval["exitconditions"] = [row[1]]
+                                temp = temp + 1
+                            else:
+                                returnval['exitconditions'].append(row[1])
+                            continue
+                        returnval[row[0]] = row[1]
+
+                    c.execute('select count(participantAddress) from contractparticipants')
+                    noOfParticipants = c.fetchall()[0][0]
+                    returnval['numberOfParticipants'] = noOfParticipants
+
+                    c.execute('select sum(tokenAmount) from contractparticipants')
+                    totalAmount = c.fetchall()[0][0]
+                    returnval['tokenAmountDeposited'] = totalAmount
+
+                    conn.close()
+                    return jsonify(result='ok', address=result[0][1], type='contract', contractInfo=returnval)
+
+        # Check if its a participant address
         queryString = "SELECT id, participantAddress,contractName, contractAddress, tokenAmount, transactionHash FROM contractParticipantMapping where participantAddress=='"+floaddress+"'"
         c.execute(queryString)
         result = c.fetchall()
@@ -226,11 +274,11 @@ def getParticipantDetails():
                 detailsDict['tokenAmount'] = row[4]
                 detailsDict['transactionHash'] = row[5]
                 participationDetailsList.append(detailsDict)
-            return jsonify(result='ok', participantAddress=result[0][1] , participatedContracts=participationDetailsList)
+            return jsonify(result='ok', address=result[0][1], type='participant' , participatedContracts=participationDetailsList)
         else:
             return jsonify(result='error', details='Address hasn\'t participanted in any other contract')
     else:
-        return jsonify(result='error', details='Smart Contract with the given name doesn\'t exist')
+        return jsonify(result='error', details='System error. System db is missing')
 
 
 @app.route('/test')
