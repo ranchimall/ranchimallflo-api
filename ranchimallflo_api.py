@@ -107,16 +107,88 @@ def gettransactions():
         rowarray_list.append(d)
     return jsonify(result='ok', transactions=rowarray_list)
 
+
 # SMART CONTRACT APIs
 
 @app.route('/api/v1.0/getsmartContractlist', methods=['GET'])
 def getcontractlist():
-    filelist = []
-    for item in os.listdir(os.path.join(dbfolder,'smartContracts')):
-        if os.path.isfile(os.path.join(dbfolder, 'smartContracts', item)):
-            filelist.append(item[:-3])
+    contractName = request.args.get('contractName')
+    contractAddress = request.args.get('contractAddress')
 
-    return jsonify(smartContracts = filelist, result='ok')
+    conn = sqlite3.connect(os.path.join(dbfolder,'system.db'))
+    c = conn.cursor()
+
+    contractList = []
+
+    if contractName and contractAddress:
+        c.execute('select * from activecontracts where contractName="{}" and contractAddress="{}"'.format(contractName, contractAddress))
+        allcontractsDetailList = c.fetchall()
+        for idx,contract in enumerate(allcontractsDetailList):
+            contractDict = {}
+            contractDict['contractName'] = contract[1]
+            contractDict['contractAddress'] = contract[2]
+            contractDict['status'] = contract[3]
+            contractDict['transactionHash'] = contract[4]
+            contractDict['incorporationDate'] = contract[5]
+            if contract[6]:
+                contractDict['expiryDate'] = contract[6]
+            if contract[7]:
+                contractDict['closeDate'] = contract[7]
+
+            contractList.append(contractDict)
+
+    else if contractName and not contractAddress:
+        c.execute('select * from activecontracts where contractName="{}"'.format(contractName))
+        allcontractsDetailList = c.fetchall()
+        for idx, contract in enumerate(allcontractsDetailList):
+            contractDict = {}
+            contractDict['contractName'] = contract[1]
+            contractDict['contractAddress'] = contract[2]
+            contractDict['status'] = contract[3]
+            contractDict['transactionHash'] = contract[4]
+            contractDict['incorporationDate'] = contract[5]
+            if contract[6]:
+                contractDict['expiryDate'] = contract[6]
+            if contract[7]:
+                contractDict['closeDate'] = contract[7]
+
+            contractList.append(contractDict)
+
+    else if not contractName and contractAddress:
+        c.execute('select * from activecontracts where contractAddress="{}"'.format(contractAddress))
+        allcontractsDetailList = c.fetchall()
+        for idx, contract in enumerate(allcontractsDetailList):
+            contractDict = {}
+            contractDict['contractName'] = contract[1]
+            contractDict['contractAddress'] = contract[2]
+            contractDict['status'] = contract[3]
+            contractDict['transactionHash'] = contract[4]
+            contractDict['incorporationDate'] = contract[5]
+            if contract[6]:
+                contractDict['expiryDate'] = contract[6]
+            if contract[7]:
+                contractDict['closeDate'] = contract[7]
+
+            contractList.append(contractDict)
+
+    else:
+        c.execute('select * from activecontracts')
+        allcontractsDetailList = c.fetchall()
+        for idx, contract in enumerate(allcontractsDetailList):
+            contractDict = {}
+            contractDict['contractName'] = contract[1]
+            contractDict['contractAddress'] = contract[2]
+            contractDict['status'] = contract[3]
+            contractDict['transactionHash'] = contract[4]
+            contractDict['incorporationDate'] = contract[5]
+            if contract[6]:
+                contractDict['expiryDate'] = contract[6]
+            if contract[7]:
+                contractDict['closeDate'] = contract[7]
+
+            contractList.append(contractDict)
+
+    return jsonify(smartContracts = contractList, result='ok')
 
 
 @app.route('/api/v1.0/getsmartContractinfo', methods=['GET'])
@@ -160,14 +232,27 @@ def getcontractinfo():
         c.execute('select sum(tokenAmount) from contractparticipants')
         totalAmount = c.fetchall()[0][0]
         returnval['tokenAmountDeposited'] = totalAmount
-
         conn.close()
+
+        conn = sqlite3.connect(os.path.join(dbfolder,'system.db'))
+        c = conn.cursor()
+        c.execute('select status, incorporationDate, expiryDate, closeDate from activecontracts where contractName=="{}" and contractAddress=="{}"'.format(name.strip(), contractAddress.strip()))
+        results = c.fetchall()
+
+        if len(results) == 1:
+            for result in results:
+                returnval['status'] = result[0]
+                returnval['incorporationDate'] = result[1]
+                if result[2]:
+                    returnval['expiryDate'] = result[2]
+                if result[3]:
+                    returnval['closeDate'] = result[3]
+
         return jsonify(result='ok', contractInfo=returnval)
 
     else:
         return jsonify(result='error', details='Smart Contract with the given name doesn\'t exist')
 
-    #return jsonify('smartContracts' : filelist, result='ok')
 
 @app.route('/api/v1.0/getsmartContractparticipants', methods=['GET'])
 def getcontractparticipants():
@@ -188,12 +273,12 @@ def getcontractparticipants():
         conn = sqlite3.connect(filelocation)
         c = conn.cursor()
         c.execute(
-            'SELECT id,participantAddress, tokenAmount, userChoice FROM contractparticipants')
+            'SELECT id,participantAddress, tokenAmount, userChoice, transactionHash, winningAmount FROM contractparticipants')
         result = c.fetchall()
         conn.close()
         returnval = {}
         for row in result:
-            returnval[row[0]] = [row[1],row[2],row[3]]
+            returnval[row[0]] = ['participantAddress':row[1], 'tokenAmount':row[2], 'userChoice':row[3], 'transactionHash':row[4], 'winningAmount':row[5]]
 
         return jsonify(result='ok', participantInfo=returnval)
 
