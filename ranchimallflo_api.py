@@ -278,7 +278,7 @@ def getcontractparticipants():
         conn.close()
         returnval = {}
         for row in result:
-            returnval[row[0]] = ['participantAddress':row[1], 'tokenAmount':row[2], 'userChoice':row[3], 'transactionHash':row[4], 'winningAmount':row[5]]
+            returnval[row[0]] = {'participantAddress':row[1], 'tokenAmount':row[2], 'userChoice':row[3], 'transactionHash':row[4], 'winningAmount':row[5]}
 
         return jsonify(result='ok', participantInfo=returnval)
 
