@@ -137,7 +137,7 @@ def getcontractlist():
 
             contractList.append(contractDict)
 
-    else if contractName and not contractAddress:
+    elif contractName and not contractAddress:
         c.execute('select * from activecontracts where contractName="{}"'.format(contractName))
         allcontractsDetailList = c.fetchall()
         for idx, contract in enumerate(allcontractsDetailList):
@@ -154,7 +154,7 @@ def getcontractlist():
 
             contractList.append(contractDict)
 
-    else if not contractName and contractAddress:
+    elif not contractName and contractAddress:
         c.execute('select * from activecontracts where contractAddress="{}"'.format(contractAddress))
         allcontractsDetailList = c.fetchall()
         for idx, contract in enumerate(allcontractsDetailList):
