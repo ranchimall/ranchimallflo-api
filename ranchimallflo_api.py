@@ -6,7 +6,7 @@ import os
 from flask import Flask
 from flask_cors import CORS
 
-dbfolder = ''
+dbfolder = '/home/vivek/Dev/RanchiMall/flo-token-tracking'
 app = Flask(__name__)
 CORS(app)
 
@@ -50,7 +50,7 @@ def gettokeninfo():
     if token is None:
         return jsonify(result='error')
 
-    dblocation = dbfolder + token + '.db'
+    dblocation = dbfolder + '/tokens/' + str(token) + '.db'
     if os.path.exists(dblocation):
         conn = sqlite3.connect(dblocation)
         c = conn.cursor()
@@ -371,5 +371,5 @@ def test():
     return render_template('test.html')
 
 if __name__ == "__main__":
-    app.run(debug=True, port=5009)
+    app.run(debug=True, port=5010)
 
