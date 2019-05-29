@@ -239,15 +239,15 @@ def getcontractinfo():
             'SELECT attribute,value FROM contractstructure')
         result = c.fetchall()
 
-        returnval = {'exitconditions': []}
+        returnval = {'userChoice': []}
         temp = 0
         for row in result:
             if row[0] == 'exitconditions':
                 if temp == 0:
-                    returnval["exitconditions"] = [row[1]]
+                    returnval["userChoice"] = [row[1]]
                     temp = temp + 1
                 else:
-                    returnval['exitconditions'].append(row[1])
+                    returnval['userChoice'].append(row[1])
                 continue
             returnval[row[0]] = row[1]
 
