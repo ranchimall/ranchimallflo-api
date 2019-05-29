@@ -108,6 +108,32 @@ def gettransactions():
     return jsonify(result='ok', transactions=rowarray_list)
 
 
+@app.route('/api/v1.0/gettokenbalances', methods=['GET'])
+def gettokenbalances():
+    token = request.args.get('token')
+    if token is None:
+        return jsonify(result='error')
+
+    dblocation = dbfolder + '/tokens/' + str(token) + '.db'
+    if os.path.exists(dblocation):
+        conn = sqlite3.connect(dblocation)
+        c = conn.cursor()
+    else:
+        return 'Token doesn\'t exist'
+    c.execute('SELECT address,SUM(transferBalance) FROM activeTable GROUP BY address')
+    addressBalances = c.fetchall()
+
+    returnList = []
+
+    for address in addressBalances:
+        tempdict = {}
+        tempdict['address'] = address[0]
+        tempdict['balance'] = address[1]
+        returnList.append(tempdict)
+
+    return jsonify(result='ok', balances=returnList)
+
+
 # SMART CONTRACT APIs
 
 @app.route('/api/v1.0/getsmartContractlist', methods=['GET'])
