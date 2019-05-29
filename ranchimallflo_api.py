@@ -31,7 +31,7 @@ def getaddressbalance():
     if address is None or token is None:
         return jsonify(result='error')
 
-    dblocation = dbfolder + token + '.db'
+    dblocation = dbfolder + '/tokens/' + str(token) + '.db'
     if os.path.exists(dblocation):
         conn = sqlite3.connect(dblocation)
         c = conn.cursor()
@@ -61,7 +61,7 @@ def gettokeninfo():
     c.execute('SELECT COUNT (DISTINCT address) FROM activeTable')
     numberOf_distinctAddresses = c.fetchall()[0][0]
     conn.close()
-    return jsonify(result='ok', token=token, incorporationAddress=incorporationRow[2], tokenSupply=incorporationRow[3],
+    return jsonify(result='ok', token=token, incorporationAddress=incorporationRow[1], tokenSupply=incorporationRow[3],
                    transactionHash=incorporationRow[6], blockchainReference=incorporationRow[7],
                    activeAddress_no=numberOf_distinctAddresses)
 
@@ -75,7 +75,7 @@ def gettransactions():
     if token is None:
         return jsonify(result='error')
 
-    dblocation = dbfolder + token + '.db'
+    dblocation = dbfolder + '/tokens/' + str(token) + '.db'
     if os.path.exists(dblocation):
         conn = sqlite3.connect(dblocation)
         conn.row_factory = sqlite3.Row
