@@ -1,20 +1,25 @@
-from flask import render_template, flash, redirect, url_for, request, jsonify
 from collections import defaultdict
 import sqlite3
 import json
 import os
-from flask import Flask
-from flask_cors import CORS
 
-dbfolder = '/home/vivek/Dev/RanchiMall/flo-token-tracking'
-app = Flask(__name__)
-CORS(app)
+from quart import jsonify, make_response, Quart, render_template, request, flash, redirect, url_for
+from quart import Quart
+from quart_cors import cors
+import asyncio
+from typing import Optional
+
+
+dbfolder = ''
+app = Quart(__name__)
+app = cors(app)
+app.clients = set()
 
 
 # FLO TOKEN APIs
 
 @app.route('/api/v1.0/gettokenlist', methods=['GET'])
-def gettokenlist():
+async def gettokenlist():
     filelist = []
     for item in os.listdir(os.path.join(dbfolder,'tokens')):
         if os.path.isfile(os.path.join(dbfolder, 'tokens', item)):
@@ -24,7 +29,7 @@ def gettokenlist():
 
 
 @app.route('/api/v1.0/getaddressbalance', methods=['GET'])
-def getaddressbalance():
+async def getaddressbalance():
     address = request.args.get('address')
     token = request.args.get('token')
 
@@ -44,7 +49,7 @@ def getaddressbalance():
 
 
 @app.route('/api/v1.0/gettokeninfo', methods=['GET'])
-def gettokeninfo():
+async def gettokeninfo():
     token = request.args.get('token')
 
     if token is None:
@@ -67,7 +72,7 @@ def gettokeninfo():
 
 
 @app.route('/api/v1.0/gettransactions', methods=['GET'])
-def gettransactions():
+async def gettransactions():
     token = request.args.get('token')
     senderFloAddress = request.args.get('senderFloAddress')
     destFloAddress = request.args.get('destFloAddress')
@@ -109,7 +114,7 @@ def gettransactions():
 
 
 @app.route('/api/v1.0/gettokenbalances', methods=['GET'])
-def gettokenbalances():
+async def gettokenbalances():
     token = request.args.get('token')
     if token is None:
         return jsonify(result='error')
@@ -137,7 +142,7 @@ def gettokenbalances():
 # SMART CONTRACT APIs
 
 @app.route('/api/v1.0/getsmartContractlist', methods=['GET'])
-def getcontractlist():
+async def getcontractlist():
     contractName = request.args.get('contractName')
     contractAddress = request.args.get('contractAddress')
 
@@ -218,7 +223,7 @@ def getcontractlist():
 
 
 @app.route('/api/v1.0/getsmartContractinfo', methods=['GET'])
-def getcontractinfo():
+async def getcontractinfo():
     name = request.args.get('name')
     contractAddress = request.args.get('contractAddress')
 
@@ -281,7 +286,7 @@ def getcontractinfo():
 
 
 @app.route('/api/v1.0/getsmartContractparticipants', methods=['GET'])
-def getcontractparticipants():
+async def getcontractparticipants():
     name = request.args.get('name')
     contractAddress = request.args.get('contractAddress')
 
@@ -313,7 +318,7 @@ def getcontractparticipants():
 
 
 @app.route('/api/v1.0/getparticipantdetails', methods=['GET'])
-def getParticipantDetails():
+async def getParticipantDetails():
     floaddress = request.args.get('floaddress')
 
     if floaddress is None:
@@ -393,9 +398,78 @@ def getParticipantDetails():
 
 
 @app.route('/test')
-def test():
+async def test():
     return render_template('test.html')
 
+class ServerSentEvent:
+
+    def __init__(
+            self,
+            data: str,
+            *,
+            event: Optional[str]=None,
+            id: Optional[int]=None,
+            retry: Optional[int]=None,
+    ) -> None:
+        self.data = data
+        self.event = event
+        self.id = id
+        self.retry = retry
+
+    def encode(self) -> bytes:
+        message = f"data: {self.data}"
+        if self.event is not None:
+            message = f"{message}\nevent: {self.event}"
+        if self.id is not None:
+            message = f"{message}\nid: {self.id}"
+        if self.retry is not None:
+            message = f"{message}\nretry: {self.retry}"
+        message = f"{message}\r\n\r\n"
+        return message.encode('utf-8')
+
+
+
+@app.route('/', methods=['GET'])
+async def index():
+    return await render_template('index.html')
+
+
+@app.route('/', methods=['POST'])
+async def broadcast():
+    data = await request.get_json()
+    for queue in app.clients:
+        await queue.put(data['message'])
+    return jsonify(True)
+
+
+@app.route('/sse')
+async def sse():
+    queue = asyncio.Queue()
+    app.clients.add(queue)
+    async def send_events():
+        while True:
+            try:
+                data = await queue.get()
+                event = ServerSentEvent(data)
+                yield event.encode()
+            except asyncio.CancelledError as error:
+                app.clients.remove(queue)
+
+    response = await make_response(
+        send_events(),
+        {
+            'Content-Type': 'text/event-stream',
+            'Cache-Control': 'no-cache',
+            'Transfer-Encoding': 'chunked',
+        },
+    )
+    response.timeout = None
+    return response
+
 if __name__ == "__main__":
-    app.run(debug=True, port=5010)
+    app.run(debug=False, port=5010)
+
+
+
+
 
