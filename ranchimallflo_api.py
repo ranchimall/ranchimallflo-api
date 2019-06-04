@@ -9,8 +9,10 @@ from quart_cors import cors
 import asyncio
 from typing import Optional
 
+from pybtc import verify_signature
+from config import *
 
-dbfolder = ''
+
 app = Quart(__name__)
 app = cors(app)
 app.clients = set()
@@ -436,10 +438,14 @@ async def index():
 
 @app.route('/', methods=['POST'])
 async def broadcast():
+    signature = request.headers.get('Signature')
     data = await request.get_json()
-    for queue in app.clients:
-        await queue.put(data['message'])
-    return jsonify(True)
+    if verify_signature(signature, sse_pubKey, data['message'].encode()):
+        for queue in app.clients:
+            await queue.put(data['message'])
+        return jsonify(True)
+    else:
+        return jsonify(False)
 
 
 @app.route('/sse')
@@ -467,7 +473,7 @@ async def sse():
     return response
 
 if __name__ == "__main__":
-    app.run(debug=False, port=5010)
+    app.run(debug=True, port=5010)
 
 
 
