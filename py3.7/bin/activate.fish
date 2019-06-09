@@ -29,7 +29,7 @@ end
 # unset irrelevant variables
 deactivate nondestructive
 
-set -gx VIRTUAL_ENV "/home/production/deployed/ranchimallflo-api/py3.7"
+set -gx VIRTUAL_ENV "/home/vivek/Dev/RanchiMall/ranchimallflo-api/py3.7"
 
 set -gx _OLD_VIRTUAL_PATH $PATH
 set -gx PATH "$VIRTUAL_ENV/bin" $PATH

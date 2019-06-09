@@ -37,7 +37,7 @@ deactivate () {
 # unset irrelevant variables
 deactivate nondestructive
 
-VIRTUAL_ENV="/home/production/deployed/ranchimallflo-api/py3.7"
+VIRTUAL_ENV="/home/vivek/Dev/RanchiMall/ranchimallflo-api/py3.7"
 export VIRTUAL_ENV
 
 _OLD_VIRTUAL_PATH="$PATH"

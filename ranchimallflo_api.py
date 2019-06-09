@@ -443,7 +443,7 @@ async def broadcast():
     if verify_signature(signature, sse_pubKey, data['message'].encode()):
         for queue in app.clients:
             await queue.put(data['message'])
-        return jsonify(True)
+            return jsonify(True)
     else:
         return jsonify(False)
 
