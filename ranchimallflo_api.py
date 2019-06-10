@@ -94,13 +94,13 @@ async def gettransactions():
         c.execute(
             'SELECT blockNumber, sourceFloAddress, destFloAddress, transferAmount, blockchainReference FROM transactionHistory WHERE sourceFloAddress="{}" ORDER BY id DESC LIMIT 100'.format(
                 senderFloAddress))
-    if not senderFloAddress and destFloAddress:
+    elif not senderFloAddress and destFloAddress:
         c.execute(
             'SELECT blockNumber, sourceFloAddress, destFloAddress, transferAmount, blockchainReference FROM transactionHistory WHERE destFloAddress="{}" ORDER BY id DESC LIMIT 100'.format(
                 destFloAddress))
-    if senderFloAddress and destFloAddress:
+    elif senderFloAddress and destFloAddress:
         c.execute(
-            'SELECT blockNumber, sourceFloAddress, destFloAddress, transferAmount, blockchainReference FROM transactionHistory WHERE sourceFloAddress="{}" OR destFloAddress="{}" ORDER BY id DESC LIMIT 100'.format(
+            'SELECT blockNumber, sourceFloAddress, destFloAddress, transferAmount, blockchainReference FROM transactionHistory WHERE sourceFloAddress="{}" AND destFloAddress="{}" ORDER BY id DESC LIMIT 100'.format(
                 senderFloAddress, destFloAddress))
 
     else:
@@ -443,7 +443,7 @@ async def broadcast():
     if verify_signature(signature, sse_pubKey, data['message'].encode()):
         for queue in app.clients:
             await queue.put(data['message'])
-            return jsonify(True)
+        return jsonify(True)
     else:
         return jsonify(False)
 
