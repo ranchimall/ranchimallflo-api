@@ -341,42 +341,49 @@ async def getParticipantDetails():
 
         if floaddress in list(activeContracts[0]):
             c.execute("select contractName from activecontracts where contractAddress=='"+floaddress+"'")
-            name = c.fetchall()
+            contract_names = c.fetchall()
 
-            if len(name) != 0:
-                contractName = '{}-{}.db'.format(name[0][0].strip(),floaddress.strip())
-                filelocation = os.path.join(dbfolder,'smartContracts', contractName)
+            if len(contract_names) != 0:
 
-                if os.path.isfile(filelocation):
-                    #Make db connection and fetch data
-                    conn = sqlite3.connect(filelocation)
-                    c = conn.cursor()
-                    c.execute(
-                        'SELECT attribute,value FROM contractstructure')
-                    result = c.fetchall()
+                contractlist = []
 
-                    returnval = {'exitconditions': []}
-                    temp = 0
-                    for row in result:
-                        if row[0] == 'exitconditions':
-                            if temp == 0:
-                                returnval["exitconditions"] = [row[1]]
-                                temp = temp + 1
-                            else:
-                                returnval['exitconditions'].append(row[1])
-                            continue
-                        returnval[row[0]] = row[1]
+                for contract_name in contract_names:
+                    contractName = '{}-{}.db'.format(contract_name[0].strip(),floaddress.strip())
+                    filelocation = os.path.join(dbfolder,'smartContracts', contractName)
 
-                    c.execute('select count(participantAddress) from contractparticipants')
-                    noOfParticipants = c.fetchall()[0][0]
-                    returnval['numberOfParticipants'] = noOfParticipants
+                    if os.path.isfile(filelocation):
+                        #Make db connection and fetch data
+                        conn = sqlite3.connect(filelocation)
+                        c = conn.cursor()
+                        c.execute(
+                            'SELECT attribute,value FROM contractstructure')
+                        result = c.fetchall()
 
-                    c.execute('select sum(tokenAmount) from contractparticipants')
-                    totalAmount = c.fetchall()[0][0]
-                    returnval['tokenAmountDeposited'] = totalAmount
+                        returnval = {'exitconditions': []}
+                        temp = 0
+                        for row in result:
+                            if row[0] == 'exitconditions':
+                                if temp == 0:
+                                    returnval["exitconditions"] = [row[1]]
+                                    temp = temp + 1
+                                else:
+                                    returnval['exitconditions'].append(row[1])
+                                continue
+                            returnval[row[0]] = row[1]
 
-                    conn.close()
-                    return jsonify(result='ok', address=floaddress, type='contract', contractInfo=returnval)
+
+                        c.execute('select count(participantAddress) from contractparticipants')
+                        noOfParticipants = c.fetchall()[0][0]
+                        returnval['numberOfParticipants'] = noOfParticipants
+
+                        c.execute('select sum(tokenAmount) from contractparticipants')
+                        totalAmount = c.fetchall()[0][0]
+                        returnval['tokenAmountDeposited'] = totalAmount
+                        conn.close()
+
+                        contractlist.append(returnval)
+
+                return jsonify(result='ok', address=floaddress, type='contract', contractList=contractlist)
 
         # Check if its a participant address
         queryString = "SELECT id, participantAddress,contractName, contractAddress, tokenAmount, transactionHash FROM contractParticipantMapping where participantAddress=='"+floaddress+"'"
