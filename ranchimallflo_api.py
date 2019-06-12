@@ -32,10 +32,10 @@ async def getTokenList():
 
 @app.route('/api/v1.0/getAddressBalance', methods=['GET'])
 async def getAddressBalance():
-    floaddress = request.args.get('floaddress')
+    floAddress = request.args.get('floAddress')
     token = request.args.get('token')
 
-    if floaddress is None or token is None:
+    if floAddress is None or token is None:
         return jsonify(result='error')
 
     dblocation = dbfolder + '/tokens/' + str(token) + '.db'
@@ -44,10 +44,10 @@ async def getAddressBalance():
         c = conn.cursor()
     else:
         return 'Token doesn\'t exist'
-    c.execute('SELECT SUM(transferBalance) FROM activeTable WHERE address="{}"'.format(floaddress))
+    c.execute('SELECT SUM(transferBalance) FROM activeTable WHERE address="{}"'.format(floAddress))
     balance = c.fetchall()[0][0]
     conn.close()
-    return jsonify(result='ok', token=token, floaddress=floaddress, balance=balance)
+    return jsonify(result='ok', token=token, floAddress=floAddress, balance=balance)
 
 
 @app.route('/api/v1.0/getTokenInfo', methods=['GET'])
@@ -134,7 +134,7 @@ async def getTokenBalances():
 
     for address in addressBalances:
         tempdict = {}
-        tempdict['floaddress'] = address[0]
+        tempdict['floAddress'] = address[0]
         tempdict['balance'] = address[1]
         returnList.append(tempdict)
 
@@ -319,11 +319,11 @@ async def getcontractparticipants():
         return jsonify(result='error', details='Smart Contract with the given name doesn\'t exist')
 
 
-@app.route('/api/v1.0/getparticipantdetails', methods=['GET'])
+@app.route('/api/v1.0/getParticipantDetails', methods=['GET'])
 async def getParticipantDetails():
-    floaddress = request.args.get('floaddress')
+    floAddress = request.args.get('floAddress')
 
-    if floaddress is None:
+    if floAddress is None:
         return jsonify(result='error', details='FLO address hasn\'t been passed')
     dblocation = os.path.join(dbfolder,'system.db')
 
@@ -339,8 +339,8 @@ async def getParticipantDetails():
         activeContracts = c.fetchall()
         activeContracts = list(zip(*activeContracts))
 
-        if floaddress in list(activeContracts[0]):
-            c.execute("select contractName from activecontracts where contractAddress=='"+floaddress+"'")
+        if floAddress in list(activeContracts[0]):
+            c.execute("select contractName from activecontracts where contractAddress=='"+floAddress+"'")
             contract_names = c.fetchall()
 
             if len(contract_names) != 0:
@@ -348,7 +348,7 @@ async def getParticipantDetails():
                 contractlist = []
 
                 for contract_name in contract_names:
-                    contractName = '{}-{}.db'.format(contract_name[0].strip(),floaddress.strip())
+                    contractName = '{}-{}.db'.format(contract_name[0].strip(),floAddress.strip())
                     filelocation = os.path.join(dbfolder,'smartContracts', contractName)
 
                     if os.path.isfile(filelocation):
@@ -383,10 +383,10 @@ async def getParticipantDetails():
 
                         contractlist.append(returnval)
 
-                return jsonify(result='ok', address=floaddress, type='contract', contractList=contractlist)
+                return jsonify(result='ok', floAddress=floAddress, type='contract', contractList=contractlist)
 
         # Check if its a participant address
-        queryString = "SELECT id, participantAddress,contractName, contractAddress, tokenAmount, transactionHash FROM contractParticipantMapping where participantAddress=='"+floaddress+"'"
+        queryString = "SELECT id, participantAddress,contractName, contractAddress, tokenAmount, transactionHash FROM contractParticipantMapping where participantAddress=='"+floAddress+"'"
         c.execute(queryString)
         result = c.fetchall()
         conn.close()
@@ -399,7 +399,7 @@ async def getParticipantDetails():
                 detailsDict['tokenAmount'] = row[4]
                 detailsDict['transactionHash'] = row[5]
                 participationDetailsList.append(detailsDict)
-            return jsonify(result='ok', address=floaddress, type='participant' , participatedContracts=participationDetailsList)
+            return jsonify(result='ok', floAddress=floAddress, type='participant', participatedContracts=participationDetailsList)
         else:
             return jsonify(result='error', details='Address hasn\'t participanted in any other contract')
     else:
