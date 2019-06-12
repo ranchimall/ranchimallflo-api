@@ -20,8 +20,8 @@ app.clients = set()
 
 # FLO TOKEN APIs
 
-@app.route('/api/v1.0/gettokenlist', methods=['GET'])
-async def gettokenlist():
+@app.route('/api/v1.0/getTokenList', methods=['GET'])
+async def getTokenList():
     filelist = []
     for item in os.listdir(os.path.join(dbfolder,'tokens')):
         if os.path.isfile(os.path.join(dbfolder, 'tokens', item)):
@@ -30,12 +30,12 @@ async def gettokenlist():
     return jsonify(tokens = filelist, result='ok')
 
 
-@app.route('/api/v1.0/getaddressbalance', methods=['GET'])
-async def getaddressbalance():
-    address = request.args.get('address')
+@app.route('/api/v1.0/getAddressBalance', methods=['GET'])
+async def getAddressBalance():
+    floaddress = request.args.get('floaddress')
     token = request.args.get('token')
 
-    if address is None or token is None:
+    if floaddress is None or token is None:
         return jsonify(result='error')
 
     dblocation = dbfolder + '/tokens/' + str(token) + '.db'
@@ -44,14 +44,14 @@ async def getaddressbalance():
         c = conn.cursor()
     else:
         return 'Token doesn\'t exist'
-    c.execute('SELECT SUM(transferBalance) FROM activeTable WHERE address="{}"'.format(address))
+    c.execute('SELECT SUM(transferBalance) FROM activeTable WHERE address="{}"'.format(floaddress))
     balance = c.fetchall()[0][0]
     conn.close()
-    return jsonify(result='ok', token=token, address=address, balance=balance)
+    return jsonify(result='ok', token=token, floaddress=floaddress, balance=balance)
 
 
-@app.route('/api/v1.0/gettokeninfo', methods=['GET'])
-async def gettokeninfo():
+@app.route('/api/v1.0/getTokenInfo', methods=['GET'])
+async def getTokenInfo():
     token = request.args.get('token')
 
     if token is None:
@@ -73,8 +73,8 @@ async def gettokeninfo():
                    activeAddress_no=numberOf_distinctAddresses)
 
 
-@app.route('/api/v1.0/gettransactions', methods=['GET'])
-async def gettransactions():
+@app.route('/api/v1.0/getTransactions', methods=['GET'])
+async def getTransactions():
     token = request.args.get('token')
     senderFloAddress = request.args.get('senderFloAddress')
     destFloAddress = request.args.get('destFloAddress')
@@ -115,8 +115,8 @@ async def gettransactions():
     return jsonify(result='ok', transactions=rowarray_list)
 
 
-@app.route('/api/v1.0/gettokenbalances', methods=['GET'])
-async def gettokenbalances():
+@app.route('/api/v1.0/getTokenBalances', methods=['GET'])
+async def getTokenBalances():
     token = request.args.get('token')
     if token is None:
         return jsonify(result='error')
@@ -134,7 +134,7 @@ async def gettokenbalances():
 
     for address in addressBalances:
         tempdict = {}
-        tempdict['address'] = address[0]
+        tempdict['floaddress'] = address[0]
         tempdict['balance'] = address[1]
         returnList.append(tempdict)
 
@@ -143,8 +143,8 @@ async def gettokenbalances():
 
 # SMART CONTRACT APIs
 
-@app.route('/api/v1.0/getsmartContractlist', methods=['GET'])
-async def getcontractlist():
+@app.route('/api/v1.0/getSmartContractList', methods=['GET'])
+async def getContractList():
     contractName = request.args.get('contractName')
     contractAddress = request.args.get('contractAddress')
 
@@ -224,19 +224,19 @@ async def getcontractlist():
     return jsonify(smartContracts = contractList, result='ok')
 
 
-@app.route('/api/v1.0/getsmartContractinfo', methods=['GET'])
-async def getcontractinfo():
-    name = request.args.get('name')
+@app.route('/api/v1.0/getSmartContractInfo', methods=['GET'])
+async def getContractInfo():
+    contractName = request.args.get('contractName')
     contractAddress = request.args.get('contractAddress')
 
-    if name is None:
+    if contractName is None:
         return jsonify(result='error', details='Smart Contract\'s name hasn\'t been passed')
 
     if contractAddress is None:
         return jsonify(result='error', details='Smart Contract\'s address hasn\'t been passed')
 
-    contractName = '{}-{}.db'.format(name.strip(),contractAddress.strip())
-    filelocation = os.path.join(dbfolder,'smartContracts', contractName)
+    contractDbName = '{}-{}.db'.format(contractName.strip(),contractAddress.strip())
+    filelocation = os.path.join(dbfolder,'smartContracts', contractDbName)
 
     if os.path.isfile(filelocation):
         #Make db connection and fetch data
@@ -269,7 +269,7 @@ async def getcontractinfo():
 
         conn = sqlite3.connect(os.path.join(dbfolder,'system.db'))
         c = conn.cursor()
-        c.execute('select status, incorporationDate, expiryDate, closeDate from activecontracts where contractName=="{}" and contractAddress=="{}"'.format(name.strip(), contractAddress.strip()))
+        c.execute('select status, incorporationDate, expiryDate, closeDate from activecontracts where contractName=="{}" and contractAddress=="{}"'.format(contractName.strip(), contractAddress.strip()))
         results = c.fetchall()
 
         if len(results) == 1:
@@ -287,19 +287,19 @@ async def getcontractinfo():
         return jsonify(result='error', details='Smart Contract with the given name doesn\'t exist')
 
 
-@app.route('/api/v1.0/getsmartContractparticipants', methods=['GET'])
+@app.route('/api/v1.0/getSmartContractParticipants', methods=['GET'])
 async def getcontractparticipants():
-    name = request.args.get('name')
+    contractName = request.args.get('contractName')
     contractAddress = request.args.get('contractAddress')
 
-    if name is None:
+    if contractName is None:
         return jsonify(result='error', details='Smart Contract\'s name hasn\'t been passed')
 
     if contractAddress is None:
         return jsonify(result='error', details='Smart Contract\'s address hasn\'t been passed')
 
-    contractName = '{}-{}.db'.format(name.strip(),contractAddress.strip())
-    filelocation = os.path.join(dbfolder,'smartContracts', contractName)
+    contractDbName = '{}-{}.db'.format(contractName.strip(),contractAddress.strip())
+    filelocation = os.path.join(dbfolder,'smartContracts', contractDbName)
 
     if os.path.isfile(filelocation):
         #Make db connection and fetch data
@@ -311,7 +311,7 @@ async def getcontractparticipants():
         conn.close()
         returnval = {}
         for row in result:
-            returnval[row[0]] = {'participantAddress':row[1], 'tokenAmount':row[2], 'userChoice':row[3], 'transactionHash':row[4], 'winningAmount':row[5]}
+            returnval[row[0]] = {'participantFloAddress':row[1], 'tokenAmount':row[2], 'userChoice':row[3], 'transactionHash':row[4], 'winningAmount':row[5]}
 
         return jsonify(result='ok', participantInfo=returnval)
 
