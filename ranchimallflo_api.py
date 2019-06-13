@@ -30,26 +30,6 @@ async def getTokenList():
     return jsonify(tokens = filelist, result='ok')
 
 
-@app.route('/api/v1.0/getAddressBalance', methods=['GET'])
-async def getAddressBalance():
-    floAddress = request.args.get('floAddress')
-    token = request.args.get('token')
-
-    if floAddress is None or token is None:
-        return jsonify(result='error')
-
-    dblocation = dbfolder + '/tokens/' + str(token) + '.db'
-    if os.path.exists(dblocation):
-        conn = sqlite3.connect(dblocation)
-        c = conn.cursor()
-    else:
-        return 'Token doesn\'t exist'
-    c.execute('SELECT SUM(transferBalance) FROM activeTable WHERE address="{}"'.format(floAddress))
-    balance = c.fetchall()[0][0]
-    conn.close()
-    return jsonify(result='ok', token=token, floAddress=floAddress, balance=balance)
-
-
 @app.route('/api/v1.0/getTokenInfo', methods=['GET'])
 async def getTokenInfo():
     token = request.args.get('token')
@@ -73,8 +53,8 @@ async def getTokenInfo():
                    activeAddress_no=numberOf_distinctAddresses)
 
 
-@app.route('/api/v1.0/getTransactions', methods=['GET'])
-async def getTransactions():
+@app.route('/api/v1.0/getTokenTransactions', methods=['GET'])
+async def getTokenTransactions():
     token = request.args.get('token')
     senderFloAddress = request.args.get('senderFloAddress')
     destFloAddress = request.args.get('destFloAddress')
@@ -139,6 +119,109 @@ async def getTokenBalances():
         returnList.append(tempdict)
 
     return jsonify(result='ok', balances=returnList)
+
+
+@app.route('/api/v1.0/getFloAddressDetails', methods=['GET'])
+async def getFloAddressDetails():
+    floAddress = request.args.get('floAddress')
+
+    if floAddress is None:
+        return jsonify(result='error', description='floAddress hasn\'t been passed')
+
+    dblocation = dbfolder + '/system.db'
+    if os.path.exists(dblocation):
+        conn = sqlite3.connect(dblocation)
+        c = conn.cursor()
+        c.execute('select token from tokenAddressMapping where tokenAddress="{}"'.format(floAddress))
+        tokenNames = c.fetchall()
+
+        if len(tokenNames) != 0:
+            detailList = []
+
+            for token in tokenNames:
+                token = token[0]
+                dblocation = dbfolder + '/tokens/' + str(token) + '.db'
+                if os.path.exists(dblocation):
+                    tempdict = {}
+                    conn = sqlite3.connect(dblocation)
+                    c = conn.cursor()
+                    c.execute('SELECT SUM(transferBalance) FROM activeTable WHERE address="{}"'.format(floAddress))
+                    balance = c.fetchall()[0][0]
+                    tempdict['balance'] = balance
+                    tempdict['token'] = token
+                    detailList.append(tempdict)
+
+            return jsonify(result='ok', floAddress=floAddress, floAddressDetails=detailList)
+
+        else:
+            # Address is not associated with any token
+            return jsonify(result='error', description='FLO address is not associated with any tokens')
+
+
+@app.route('/api/v1.0/getFloAddressBalance', methods=['GET'])
+async def getAddressBalance():
+    floAddress = request.args.get('floAddress')
+    token = request.args.get('token')
+
+    if floAddress is None or token is None:
+        return jsonify(result='error')
+
+    dblocation = dbfolder + '/tokens/' + str(token) + '.db'
+    if os.path.exists(dblocation):
+        conn = sqlite3.connect(dblocation)
+        c = conn.cursor()
+    else:
+        return 'Token doesn\'t exist'
+    c.execute('SELECT SUM(transferBalance) FROM activeTable WHERE address="{}"'.format(floAddress))
+    balance = c.fetchall()[0][0]
+    conn.close()
+    return jsonify(result='ok', token=token, floAddress=floAddress, balance=balance)
+
+
+@app.route('/api/v1.0/getFloAddressTransactions', methods=['GET'])
+async def getAddressTransactions():
+    floAddress = request.args.get('floAddress')
+
+    if floAddress is None:
+        return jsonify(result='error', description='floAddress has not been passed')
+
+    dblocation = dbfolder + '/system.db'
+    if os.path.exists(dblocation):
+        conn = sqlite3.connect(dblocation)
+    c = conn.cursor()
+    c.execute('select token from tokenAddressMapping where tokenAddress="{}"'.format(floAddress))
+    tokenNames = c.fetchall()
+
+    if len(tokenNames) != 0:
+        allTransactionList = []
+
+    for token in tokenNames:
+        token = token[0]
+        dblocation = dbfolder + '/tokens/' + str(token) + '.db'
+        if os.path.exists(dblocation):
+            tempdict = {}
+            conn = sqlite3.connect(dblocation)
+            c = conn.cursor()
+            c.execute('SELECT blockNumber, sourceFloAddress, destFloAddress, transferAmount, blockchainReference FROM transactionHistory ORDER BY id DESC LIMIT 100')
+            latestTransactions = c.fetchall()
+            conn.close()
+
+            rowarray_list = []
+            for row in latestTransactions:
+                row = list(row)
+                d = {}
+                d['blockNumber'] = row[0]
+                d['sourceFloAddress'] = row[1]
+                d['destFloAddress'] = row[2]
+                d['transferAmount'] = row[3]
+                d['blockchainReference'] = row[4]
+                rowarray_list.append(d)
+
+            tempdict['token'] = token
+            tempdict['transactions'] = rowarray_list
+            allTransactionList.append(tempdict)
+
+    return jsonify(result='ok', floAddress=floAddress, allTransactions=allTransactionList)
 
 
 # SMART CONTRACT APIs
