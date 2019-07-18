@@ -530,7 +530,7 @@ async def index():
 async def broadcast():
     signature = request.headers.get('Signature')
     data = await request.get_json()
-    if verify_signature(signature, sse_pubKey, data['message'].encode()):
+    if verify_signature(signature.encode(), sse_pubKey, data['message'].encode()):
         for queue in app.clients:
             await queue.put(data['message'])
         return jsonify(True)
@@ -564,8 +564,3 @@ async def sse():
 
 if __name__ == "__main__":
     app.run(debug=True, port=5010)
-
-
-
-
-
