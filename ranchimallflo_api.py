@@ -2,6 +2,7 @@ from collections import defaultdict
 import sqlite3
 import json
 import os
+import requests
 
 from quart import jsonify, make_response, Quart, render_template, request, flash, redirect, url_for
 from quart import Quart
@@ -15,7 +16,6 @@ from config import *
 
 app = Quart(__name__)
 app = cors(app)
-app.clients = set()
 
 
 # FLO TOKEN APIs
@@ -23,11 +23,11 @@ app.clients = set()
 @app.route('/api/v1.0/getTokenList', methods=['GET'])
 async def getTokenList():
     filelist = []
-    for item in os.listdir(os.path.join(dbfolder,'tokens')):
+    for item in os.listdir(os.path.join(dbfolder, 'tokens')):
         if os.path.isfile(os.path.join(dbfolder, 'tokens', item)):
             filelist.append(item[:-3])
 
-    return jsonify(tokens = filelist, result='ok')
+    return jsonify(tokens=filelist, result='ok')
 
 
 @app.route('/api/v1.0/getTokenInfo', methods=['GET'])
@@ -231,7 +231,7 @@ async def getContractList():
     contractName = request.args.get('contractName')
     contractAddress = request.args.get('contractAddress')
 
-    conn = sqlite3.connect(os.path.join(dbfolder,'system.db'))
+    conn = sqlite3.connect(os.path.join(dbfolder, 'system.db'))
     c = conn.cursor()
 
     contractList = []
@@ -239,7 +239,7 @@ async def getContractList():
     if contractName and contractAddress:
         c.execute('select * from activecontracts where contractName="{}" and contractAddress="{}"'.format(contractName, contractAddress))
         allcontractsDetailList = c.fetchall()
-        for idx,contract in enumerate(allcontractsDetailList):
+        for idx, contract in enumerate(allcontractsDetailList):
             contractDict = {}
             contractDict['contractName'] = contract[1]
             contractDict['contractAddress'] = contract[2]
@@ -304,7 +304,7 @@ async def getContractList():
 
             contractList.append(contractDict)
 
-    return jsonify(smartContracts = contractList, result='ok')
+    return jsonify(smartContracts=contractList, result='ok')
 
 
 @app.route('/api/v1.0/getSmartContractInfo', methods=['GET'])
@@ -318,11 +318,11 @@ async def getContractInfo():
     if contractAddress is None:
         return jsonify(result='error', details='Smart Contract\'s address hasn\'t been passed')
 
-    contractDbName = '{}-{}.db'.format(contractName.strip(),contractAddress.strip())
-    filelocation = os.path.join(dbfolder,'smartContracts', contractDbName)
+    contractDbName = '{}-{}.db'.format(contractName.strip(), contractAddress.strip())
+    filelocation = os.path.join(dbfolder, 'smartContracts', contractDbName)
 
     if os.path.isfile(filelocation):
-        #Make db connection and fetch data
+        # Make db connection and fetch data
         conn = sqlite3.connect(filelocation)
         c = conn.cursor()
         c.execute(
@@ -350,7 +350,7 @@ async def getContractInfo():
         returnval['tokenAmountDeposited'] = totalAmount
         conn.close()
 
-        conn = sqlite3.connect(os.path.join(dbfolder,'system.db'))
+        conn = sqlite3.connect(os.path.join(dbfolder, 'system.db'))
         c = conn.cursor()
         c.execute('select status, incorporationDate, expiryDate, closeDate from activecontracts where contractName=="{}" and contractAddress=="{}"'.format(contractName.strip(), contractAddress.strip()))
         results = c.fetchall()
@@ -381,11 +381,11 @@ async def getcontractparticipants():
     if contractAddress is None:
         return jsonify(result='error', details='Smart Contract\'s address hasn\'t been passed')
 
-    contractDbName = '{}-{}.db'.format(contractName.strip(),contractAddress.strip())
-    filelocation = os.path.join(dbfolder,'smartContracts', contractDbName)
+    contractDbName = '{}-{}.db'.format(contractName.strip(), contractAddress.strip())
+    filelocation = os.path.join(dbfolder, 'smartContracts', contractDbName)
 
     if os.path.isfile(filelocation):
-        #Make db connection and fetch data
+        # Make db connection and fetch data
         conn = sqlite3.connect(filelocation)
         c = conn.cursor()
         c.execute(
@@ -394,7 +394,7 @@ async def getcontractparticipants():
         conn.close()
         returnval = {}
         for row in result:
-            returnval[row[0]] = {'participantFloAddress':row[1], 'tokenAmount':row[2], 'userChoice':row[3], 'transactionHash':row[4], 'winningAmount':row[5]}
+            returnval[row[0]] = {'participantFloAddress': row[1], 'tokenAmount': row[2], 'userChoice': row[3], 'transactionHash': row[4], 'winningAmount': row[5]}
 
         return jsonify(result='ok', participantInfo=returnval)
 
@@ -408,7 +408,7 @@ async def getParticipantDetails():
 
     if floAddress is None:
         return jsonify(result='error', details='FLO address hasn\'t been passed')
-    dblocation = os.path.join(dbfolder,'system.db')
+    dblocation = os.path.join(dbfolder, 'system.db')
 
     print(dblocation)
 
@@ -423,7 +423,7 @@ async def getParticipantDetails():
         activeContracts = list(zip(*activeContracts))
 
         if floAddress in list(activeContracts[0]):
-            c.execute("select contractName from activecontracts where contractAddress=='"+floAddress+"'")
+            c.execute("select contractName from activecontracts where contractAddress=='" + floAddress + "'")
             contract_names = c.fetchall()
 
             if len(contract_names) != 0:
@@ -431,11 +431,11 @@ async def getParticipantDetails():
                 contractlist = []
 
                 for contract_name in contract_names:
-                    contractName = '{}-{}.db'.format(contract_name[0].strip(),floAddress.strip())
-                    filelocation = os.path.join(dbfolder,'smartContracts', contractName)
+                    contractName = '{}-{}.db'.format(contract_name[0].strip(), floAddress.strip())
+                    filelocation = os.path.join(dbfolder, 'smartContracts', contractName)
 
                     if os.path.isfile(filelocation):
-                        #Make db connection and fetch data
+                        # Make db connection and fetch data
                         conn = sqlite3.connect(filelocation)
                         c = conn.cursor()
                         c.execute(
@@ -454,7 +454,6 @@ async def getParticipantDetails():
                                 continue
                             returnval[row[0]] = row[1]
 
-
                         c.execute('select count(participantAddress) from contractparticipants')
                         noOfParticipants = c.fetchall()[0][0]
                         returnval['numberOfParticipants'] = noOfParticipants
@@ -469,15 +468,15 @@ async def getParticipantDetails():
                 return jsonify(result='ok', floAddress=floAddress, type='contract', contractList=contractlist)
 
         # Check if its a participant address
-        queryString = "SELECT id, participantAddress,contractName, contractAddress, tokenAmount, transactionHash FROM contractParticipantMapping where participantAddress=='"+floAddress+"'"
+        queryString = "SELECT id, participantAddress,contractName, contractAddress, tokenAmount, transactionHash FROM contractParticipantMapping where participantAddress=='" + floAddress + "'"
         c.execute(queryString)
         result = c.fetchall()
         conn.close()
-        if len(result)!=0:
+        if len(result) != 0:
             participationDetailsList = []
             for row in result:
                 detailsDict = {}
-                detailsDict['contractName']= row[2]
+                detailsDict['contractName'] = row[2]
                 detailsDict['contractAddress'] = row[3]
                 detailsDict['tokenAmount'] = row[4]
                 detailsDict['transactionHash'] = row[5]
@@ -489,9 +488,21 @@ async def getParticipantDetails():
         return jsonify(result='error', details='System error. System db is missing')
 
 
+@app.route('/api/v1.0/getBlockDetails/<blockno>', methods=['GET'])
+async def getblockdetails(blockno):
+    blockhash = requests.get('https://flosight.duckdns.org/api/block-index/{}'.format(blockno))
+    blockhash = json.loads(blockhash.content)
+
+    blockdetails = requests.get('https://flosight.duckdns.org/api/block/{}'.format(blockhash['blockHash']))
+    blockdetails = json.loads(blockdetails.content)
+
+    return jsonify(blockdetails)
+
+
 @app.route('/test')
 async def test():
     return render_template('test.html')
+
 
 class ServerSentEvent:
 
@@ -520,7 +531,6 @@ class ServerSentEvent:
         return message.encode('utf-8')
 
 
-
 @app.route('/', methods=['GET'])
 async def index():
     return await render_template('index.html')
@@ -542,6 +552,7 @@ async def broadcast():
 async def sse():
     queue = asyncio.Queue()
     app.clients.add(queue)
+
     async def send_events():
         while True:
             try:
