@@ -12,6 +12,7 @@ from typing import Optional
 
 from pybtc import verify_signature
 from config import *
+import parsing
 
 
 app = Quart(__name__)
@@ -497,6 +498,20 @@ async def getblockdetails(blockno):
     blockdetails = json.loads(blockdetails.content)
 
     return jsonify(blockdetails)
+
+
+@app.route('/api/v1.0/getTransactionDetails/<transactionHash>', methods=['GET'])
+async def gettransactiondetails(transactionHash):
+    transactionDetails = requests.get('https://flosight.duckdns.org/api/tx/{}'.format(transactionHash))
+    transactionDetails = json.loads(transactionDetails.content)
+
+    flodata = transactionDetails['floData']
+
+    blockdetails = requests.get('https://flosight.duckdns.org/api/block/{}'.format(transactionDetails['blockhash']))
+    blockdetails = json.loads(blockdetails.content)
+
+    parseResult = parsing.parse_flodata(flodata, blockdetails)
+    return jsonify(parsingDetails=parseResult, transactionDetails=transactionDetails)
 
 
 @app.route('/test')
