@@ -514,6 +514,56 @@ async def gettransactiondetails(transactionHash):
     return jsonify(parsingDetails=parseResult, transactionDetails=transactionDetails)
 
 
+@app.route('/api/v1.0/getVscoutDetails', methods=['GET'])
+async def getVscoutDetails():
+    latestBlock = requests.get('https://flosight.duckdns.org/api/blocks?limit=1')
+    latestBlock = json.loads(latestBlock)
+
+    # get details of the last s4 blocks
+    blockurl = 'https://flosight.duckdns.org/api/block/{}'.format(latestBlock["blocks"]['hash'])
+    blockdetails = requests.get('https://flosight.duckdns.org/api/block/{}'.format(latestBlock["blocks"]['hash']))
+    block4details = json.loads(blockdetails)
+    return jsonify(block4details)
+
+
+@app.route('/api/v1.0/getLatestTransactionDetails', methods=['GET'])
+async def getLatestTransactionDetails():
+    dblocation = dbfolder + '/latestCache.db'
+    if os.path.exists(dblocation):
+        conn = sqlite3.connect(dblocation)
+        c = conn.cursor()
+    else:
+        return 'Latest transactions db doesn\'t exist. This is unusual, please report on https://github.com/ranchimall/ranchimallflo-api'
+    c.execute('''SELECT * FROM ( SELECT * FROM latestTransactions ORDER BY id DESC LIMIT 10) ORDER BY id ASC;''')
+    latestTransactions = c.fetchall()
+    c.close()
+    tempdict = []
+    for idx, item in enumerate(latestTransactions):
+        tx_parsed_details = {}
+        tx_parsed_details['transactionDetails'] = json.loads(item[2])
+        tx_parsed_details['parsedFloData'] = json.loads(item[4])
+        tx_parsed_details['parsedFloData']['transactionType'] = item[3]
+        tempdict.append(tx_parsed_details)
+    return jsonify(result='ok', latestTransactions=tempdict)
+
+
+@app.route('/api/v1.0/getLatestBlockDetails', methods=['GET'])
+async def getLatestBlockDetails():
+    dblocation = dbfolder + '/latestCache.db'
+    if os.path.exists(dblocation):
+        conn = sqlite3.connect(dblocation)
+        c = conn.cursor()
+    else:
+        return 'Latest transactions db doesn\'t exist. This is unusual, please report on https://github.com/ranchimall/ranchimallflo-api'
+    c.execute('''SELECT * FROM ( SELECT * FROM latestBlocks ORDER BY id DESC LIMIT 4) ORDER BY id ASC;''')
+    latestBlocks = c.fetchall()
+    c.close()
+    tempdict = []
+    for idx, item in enumerate(latestBlocks):
+        tempdict.append(json.loads(item[3]))
+    return jsonify(result='ok', latestBlocks=tempdict)
+
+
 @app.route('/test')
 async def test():
     return render_template('test.html')
