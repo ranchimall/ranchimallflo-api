@@ -460,17 +460,112 @@ Output:
 ### Latest Blocks details 
 Get information about latest blocks 
 ```
-  /api/v1.0/getLatestBlockDetails
+  /api/v1.0/getLatestBlockDetails/<blockno>
 ```
 Output:
 ```
+{
+    "bits": 486730121,
+    "chainwork": "000000000000000000000000000000000000000000000000000007a879245c83",
+    "confirmations": 3612882,
+    "difficulty": 3326,
+    "hash": "1505dff5d42ec30639c37740078f0378eb0abf859412082073ba6f3cc799c234",
+    "height": 5234,
+    "isMainChain": true,
+    "merkleroot": "347bffbe1e6f4e3c227558d55ff7a37f22ef890e1b7504cfc9bf5188dcb5aa5e",
+    "nextblockhash": "4c1cfcf2575a814b388668fa12815eb757b5f44323e79dd8fcbb2f366c96cb08",
+    "nonce": 3145073920,
+    "poolInfo": {},
+    "previousblockhash": "ea8ad584fec1af50ef98569d95dcc6ee9555f87e50d9d9aa46a72e7cf9dfbf2c",
+    "reward": 100,
+    "size": 192,
+    "time": 1371693986,
+    "tx": [
+        "347bffbe1e6f4e3c227558d55ff7a37f22ef890e1b7504cfc9bf5188dcb5aa5e"
+        ],
+    "version": 1
+}
 ```
 
 ### Latest Transactions details 
 Get information about latest blocks 
 ```
-  /api/v1.0/getLatestTransactionDetails
+  /api/v1.0/getLatestTransactionDetails/<transactionHash>
 ```
 Output:
 ```
+{
+"parsingDetails": {
+"flodata": "create 1 billion rupee#",
+"tokenAmount": 1000000000,
+"tokenIdentification": "rupee",
+"type": "tokenIncorporation"
+},
+"transactionDetails": {
+"blockhash": "550e516d62e06013f7691eb58a139a393b6514571a6d252fd62557262884666c",
+"blockheight": 3609700,
+"blocktime": 1566643220,
+"confirmations": 8417,
+"fees": 0.0005,
+"floData": "create 1 billion rupee#",
+"locktime": 0,
+"size": 249,
+"time": 1566643220,
+"txid": "e6338071b4247003e16aae50e2696d42f42df116b928122bd94c3c718fbd70bc",
+"valueIn": 1,
+"valueOut": 0.9995,
+"version": 2,
+"vin": [
+{
+"addr": "FQ5EZGMYXa1s2mLsdPrs3Y41nQffaAyBVV",
+"confirmations": null,
+"doubleSpentTxID": null,
+"isConfirmed": null,
+"n": 0,
+"scriptSig": {
+"asm": "304402207677f26362c0fa07c31a54e1f79e8b8d1d5918c20243ebd5e8b0fb21a56bba33022013fed7f459a10db9e39c5970ce198bc07efcf28f572c79f6640e115f8ca7581b01 02c5db0639bd937227c4b00d4f9de475a0e68a75d07e2987b744e9a9096381a6e9",
+"hex": "47304402207677f26362c0fa07c31a54e1f79e8b8d1d5918c20243ebd5e8b0fb21a56bba33022013fed7f459a10db9e39c5970ce198bc07efcf28f572c79f6640e115f8ca7581b012102c5db0639bd937227c4b00d4f9de475a0e68a75d07e2987b744e9a9096381a6e9"
+},
+"sequence": 4294967295,
+"txid": "40cf13ae30a2357b86462edca0345697666839ce5ba3cdf12e173535d88a2778",
+"unconfirmedInput": null,
+"value": 1,
+"valueSat": 100000000,
+"vout": 0
+}
+],
+"vout": [
+{
+"n": 0,
+"scriptPubKey": {
+"addresses": [
+"F7osBpjDDV1mSSnMNrLudEQQ3cwDJ2dPR1"
+],
+"asm": "OP_DUP OP_HASH160 15b3eb460d593f74775167d589a3a443eb78b55b OP_EQUALVERIFY OP_CHECKSIG",
+"hex": "76a91415b3eb460d593f74775167d589a3a443eb78b55b88ac",
+"type": "pubkeyhash"
+},
+"spentHeight": null,
+"spentIndex": null,
+"spentTxId": null,
+"value": "0.00100000"
+},
+{
+"n": 1,
+"scriptPubKey": {
+"addresses": [
+"FQ5EZGMYXa1s2mLsdPrs3Y41nQffaAyBVV"
+],
+"asm": "OP_DUP OP_HASH160 c81e026ffa6313d1263eb081fb6bdef9b38ed3a1 OP_EQUALVERIFY OP_CHECKSIG",
+"hex": "76a914c81e026ffa6313d1263eb081fb6bdef9b38ed3a188ac",
+"type": "pubkeyhash"
+},
+"spentHeight": null,
+"spentIndex": null,
+"spentTxId": null,
+"value": "0.99850000"
+}
+]
+}
+}
 ```
