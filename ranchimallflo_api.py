@@ -491,10 +491,10 @@ async def getParticipantDetails():
 
 @app.route('/api/v1.0/getBlockDetails/<blockno>', methods=['GET'])
 async def getblockdetails(blockno):
-    blockhash = requests.get('https://flosight.duckdns.org/api/block-index/{}'.format(blockno))
+    blockhash = requests.get('{}block-index/{}'.format(apiUrl,blockno))
     blockhash = json.loads(blockhash.content)
 
-    blockdetails = requests.get('https://flosight.duckdns.org/api/block/{}'.format(blockhash['blockHash']))
+    blockdetails = requests.get('{}block/{}'.format(apiUrl,blockhash['blockHash']))
     blockdetails = json.loads(blockdetails.content)
 
     return jsonify(blockdetails)
@@ -502,12 +502,12 @@ async def getblockdetails(blockno):
 
 @app.route('/api/v1.0/getTransactionDetails/<transactionHash>', methods=['GET'])
 async def gettransactiondetails(transactionHash):
-    transactionDetails = requests.get('https://flosight.duckdns.org/api/tx/{}'.format(transactionHash))
+    transactionDetails = requests.get('{}tx/{}'.format(apiUrl,transactionHash))
     transactionDetails = json.loads(transactionDetails.content)
 
     flodata = transactionDetails['floData']
 
-    blockdetails = requests.get('https://flosight.duckdns.org/api/block/{}'.format(transactionDetails['blockhash']))
+    blockdetails = requests.get('{}block/{}'.format(apiUrl,transactionDetails['blockhash']))
     blockdetails = json.loads(blockdetails.content)
 
     parseResult = parsing.parse_flodata(flodata, blockdetails)
@@ -516,12 +516,12 @@ async def gettransactiondetails(transactionHash):
 
 @app.route('/api/v1.0/getVscoutDetails', methods=['GET'])
 async def getVscoutDetails():
-    latestBlock = requests.get('https://flosight.duckdns.org/api/blocks?limit=1')
+    latestBlock = requests.get('{}blocks?limit=1'.format(apiUrl))
     latestBlock = json.loads(latestBlock)
 
     # get details of the last s4 blocks
-    blockurl = 'https://flosight.duckdns.org/api/block/{}'.format(latestBlock["blocks"]['hash'])
-    blockdetails = requests.get('https://flosight.duckdns.org/api/block/{}'.format(latestBlock["blocks"]['hash']))
+    blockurl = '{}block/{}'.format(apiUrl,latestBlock["blocks"]['hash'])
+    blockdetails = requests.get('{}block/{}'.format(apiUrl,latestBlock["blocks"]['hash']))
     block4details = json.loads(blockdetails)
     return jsonify(block4details)
 
@@ -539,12 +539,13 @@ async def getLatestTransactionDetails():
     c.close()
     tempdict = []
     for idx, item in enumerate(latestTransactions):
+        item = list(item)
         tx_parsed_details = {}
         tx_parsed_details['transactionDetails'] = json.loads(item[2])
         tx_parsed_details['parsedFloData'] = json.loads(item[4])
         tx_parsed_details['parsedFloData']['transactionType'] = item[3]
         tempdict.append(tx_parsed_details)
-    return jsonify(result='ok', latestTransactions=tempdict)
+    return jsonify(result='ok', latestTransactions=tempdict, temp=item)
 
 
 @app.route('/api/v1.0/getLatestBlockDetails', methods=['GET'])
@@ -639,4 +640,4 @@ async def sse():
     return response
 
 if __name__ == "__main__":
-    app.run(debug=False,host='0.0.0.0', port=5009)
+    app.run(debug=True,host='0.0.0.0', port=5009)
