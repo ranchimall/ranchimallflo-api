@@ -546,6 +546,8 @@ async def getLatestTransactionDetails():
         tx_parsed_details['transactionDetails'] = json.loads(item[2])
         tx_parsed_details['parsedFloData'] = json.loads(item[4])
         tx_parsed_details['parsedFloData']['transactionType'] = item[3]
+        response = json.loads(requests.get('{}block/{}'.format(apiUrl,tx_parsed_details['blockhash'])))
+        tx_parsed_details['transactionDetails']['blockheight'] = response['height']
         tempdict.append(tx_parsed_details)
     return jsonify(result='ok', latestTransactions=tempdict, temp=item)
 
