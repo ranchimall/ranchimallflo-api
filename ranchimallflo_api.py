@@ -48,10 +48,12 @@ async def getTokenInfo():
     incorporationRow = c.fetchall()[0]
     c.execute('SELECT COUNT (DISTINCT address) FROM activeTable')
     numberOf_distinctAddresses = c.fetchall()[0][0]
+    c.execute('select max(id) from transactionHistory')
+    numberOf_transactions = c.fetchall()[0][0]
     conn.close()
     return jsonify(result='ok', token=token, incorporationAddress=incorporationRow[1], tokenSupply=incorporationRow[3],
                    transactionHash=incorporationRow[6], blockchainReference=incorporationRow[7],
-                   activeAddress_no=numberOf_distinctAddresses)
+                   activeAddress_no=numberOf_distinctAddresses, totalTransactions = numberOf_transactions)
 
 
 @app.route('/api/v1.0/getTokenTransactions', methods=['GET'])
