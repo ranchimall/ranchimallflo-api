@@ -14,6 +14,9 @@ from pybtc import verify_signature
 from config import *
 import parsing
 
+from os import listdir
+from os.path import isfile, join
+
 
 app = Quart(__name__)
 app = cors(app)
@@ -570,19 +573,35 @@ async def getLatestBlockDetails():
     return jsonify(result='ok', latestBlocks=tempdict)
 
 
-@app.route('/api/v1.0/checkhash/<hash>')
-async def checkhash(hash):
+@app.route('/api/v1.0/categoriseString/<urlstring>')
+async def checkhash(urlstring):
 
     # check if the hash is of a transaction
-    response = requests.get('{}tx/{}'.format(apiUrl,hash))
+    response = requests.get('{}tx/{}'.format(apiUrl,urlstring))
     if response.status_code == 200:
         return jsonify(type='transaction')
     else:
-        response = requests.get('{}block/{}'.format(apiUrl,hash))
+        response = requests.get('{}block/{}'.format(apiUrl,urlstring))
         if response.status_code == 200:
             return jsonify(type='block')
         else:
-            return jsonify(type='noise')
+            # check urlstring is a token name
+            tokenfolder = os.path.join(dbfolder, 'tokens')
+            onlyfiles = [f[:-3] for f in listdir(tokenfolder) if isfile(join(tokenfolder, f))]
+
+            if urlstring.lower() in onlyfiles:
+                return jsonify(type='token')
+            else:
+                contractfolder = os.path.join(dbfolder, 'system.db')
+                conn = sqlite3.connect(contractfolder)
+                conn.row_factory = lambda cursor, row: row[0]
+                c = conn.cursor()
+                contractList = c.execute('select contractname from activeContracts').fetchall()
+
+                if urlstring.lower() in contractList:
+                    return jsonify(type='smartContract')
+                else:
+                    return jsonify(type='noise')
 
 
 @app.route('/test')
