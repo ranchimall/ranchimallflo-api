@@ -574,7 +574,7 @@ async def getLatestBlockDetails():
 
 
 @app.route('/api/v1.0/categoriseString/<urlstring>')
-async def checkhash(urlstring):
+async def categoriseString(urlstring):
 
     # check if the hash is of a transaction
     response = requests.get('{}tx/{}'.format(apiUrl,urlstring))
@@ -602,6 +602,39 @@ async def checkhash(urlstring):
                     return jsonify(type='smartContract')
                 else:
                     return jsonify(type='noise')
+
+
+@app.route('/api/v1.0/getTokenSmartContractList', methods=['GET'])
+async def getTokenSmartContractList():
+    # list of tokens
+    filelist = []
+    for item in os.listdir(os.path.join(dbfolder, 'tokens')):
+        if os.path.isfile(os.path.join(dbfolder, 'tokens', item)):
+            filelist.append(item[:-3])
+
+    # list of smart contracts
+    conn = sqlite3.connect(os.path.join(dbfolder, 'system.db'))
+    c = conn.cursor()
+
+    contractList = []
+
+    c.execute('select * from activecontracts')
+    allcontractsDetailList = c.fetchall()
+    for idx, contract in enumerate(allcontractsDetailList):
+        contractDict = {}
+        contractDict['contractName'] = contract[1]
+        contractDict['contractAddress'] = contract[2]
+        contractDict['status'] = contract[3]
+        contractDict['transactionHash'] = contract[4]
+        contractDict['incorporationDate'] = contract[5]
+        if contract[6]:
+            contractDict['expiryDate'] = contract[6]
+        if contract[7]:
+            contractDict['closeDate'] = contract[7]
+
+        contractList.append(contractDict)
+
+    return jsonify(tokens=filelist, smartContracts=contractList, result='ok')
 
 
 @app.route('/test')
