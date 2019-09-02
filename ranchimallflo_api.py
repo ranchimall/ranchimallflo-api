@@ -570,6 +570,21 @@ async def getLatestBlockDetails():
     return jsonify(result='ok', latestBlocks=tempdict)
 
 
+@app.route('/api/v1.0/checkhash/<hash>')
+async def checkhash(hash):
+
+    # check if the hash is of a transaction
+    response = requests.get('{}transaction/{}'.format(apiUrl,hash))
+    if response.status_code == 200:
+        return jsonify(type='transaction')
+    else:
+        response = requests.get('{}block/{}'.format(apiUrl,hash))
+        if response.status_code == 200:
+            return jsonify(type='block')
+        else:
+            return jsonify(type='noise')
+
+
 @app.route('/test')
 async def test():
     return render_template('test.html')
