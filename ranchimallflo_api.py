@@ -574,7 +574,7 @@ async def getLatestBlockDetails():
 async def checkhash(hash):
 
     # check if the hash is of a transaction
-    response = requests.get('{}transaction/{}'.format(apiUrl,hash))
+    response = requests.get('{}tx/{}'.format(apiUrl,hash))
     if response.status_code == 200:
         return jsonify(type='transaction')
     else:
