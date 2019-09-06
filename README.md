@@ -460,7 +460,7 @@ Output:
 ### Latest Blocks details 
 Get information about latest blocks 
 ```
-  /api/v1.0/getLatestBlockDetails/<blockno>
+  /api/v1.0/getLatestBlockDetails
 ```
 Output:
 ```
@@ -490,7 +490,7 @@ Output:
 ### Latest Transactions details 
 Get information about latest blocks 
 ```
-  /api/v1.0/getLatestTransactionDetails/<transactionHash>
+  /api/v1.0/getLatestTransactionDetails
 ```
 Output:
 ```
