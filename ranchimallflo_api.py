@@ -19,7 +19,7 @@ from os.path import isfile, join
 
 
 app = Quart(__name__)
-app = cors(app)
+app = cors(app, allow_origin="*")
 
 
 # FLO TOKEN APIs
