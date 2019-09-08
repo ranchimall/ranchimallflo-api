@@ -7,6 +7,7 @@ import requests
 from quart import jsonify, make_response, Quart, render_template, request, flash, redirect, url_for
 from quart import Quart
 from quart_cors import cors
+
 import asyncio
 from typing import Optional
 
@@ -19,6 +20,7 @@ from os.path import isfile, join
 
 
 app = Quart(__name__)
+app.clients = set()
 app = cors(app, allow_origin="*")
 
 
@@ -669,6 +671,7 @@ class ServerSentEvent:
         return message.encode('utf-8')
 
 
+
 @app.route('/', methods=['GET'])
 async def index():
     return await render_template('index.html')
@@ -676,21 +679,16 @@ async def index():
 
 @app.route('/', methods=['POST'])
 async def broadcast():
-    signature = request.headers.get('Signature')
     data = await request.get_json()
-    if verify_signature(signature.encode(), sse_pubKey, data['message'].encode()):
-        for queue in app.clients:
-            await queue.put(data['message'])
-        return jsonify(True)
-    else:
-        return jsonify(False)
+    for queue in app.clients:
+        await queue.put(data['message'])
+    return jsonify(True)
 
 
 @app.route('/sse')
 async def sse():
     queue = asyncio.Queue()
     app.clients.add(queue)
-
     async def send_events():
         while True:
             try:
@@ -710,6 +708,7 @@ async def sse():
     )
     response.timeout = None
     return response
+
 
 if __name__ == "__main__":
     app.run(debug=True,host='0.0.0.0', port=5009)
