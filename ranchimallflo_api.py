@@ -535,26 +535,42 @@ async def getVscoutDetails():
 
 @app.route('/api/v1.0/getLatestTransactionDetails', methods=['GET'])
 async def getLatestTransactionDetails():
+
+    numberOfLatestBlocks = request.args.get('numberOfLatestBlocks')
+
     dblocation = dbfolder + '/latestCache.db'
     if os.path.exists(dblocation):
         conn = sqlite3.connect(dblocation)
         c = conn.cursor()
     else:
         return 'Latest transactions db doesn\'t exist. This is unusual, please report on https://github.com/ranchimall/ranchimallflo-api'
-    c.execute('''SELECT * FROM ( SELECT * FROM latestTransactions ORDER BY id DESC LIMIT 10) ORDER BY id ASC;''')
-    latestTransactions = c.fetchall()
-    c.close()
-    tempdict = []
-    for idx, item in enumerate(latestTransactions):
-        item = list(item)
-        tx_parsed_details = {}
-        tx_parsed_details['transactionDetails'] = json.loads(item[2])
-        tx_parsed_details['parsedFloData'] = json.loads(item[4])
-        tx_parsed_details['parsedFloData']['transactionType'] = item[3]
-        response = requests.get('{}block/{}'.format(apiUrl,tx_parsed_details['transactionDetails']['blockhash']))
-        response = json.loads(response.content)
-        tx_parsed_details['transactionDetails']['blockheight'] = response['height']
-        tempdict.append(tx_parsed_details)
+
+    if numberOfLatestBlocks is not None:
+        c.execute('SELECT * FROM latestTransactions WHERE blockNumber IN (SELECT blockNumber FROM latestBlocks ORDER BY blockNumber DESC LIMIT {}) ORDER BY id ASC;'.format(int(numberOfLatestBlocks)))
+        latestTransactions = c.fetchall()
+        c.close()
+        tempdict = []
+        for idx, item in enumerate(latestTransactions):
+            item = list(item)
+            tx_parsed_details = {}
+            tx_parsed_details['transactionDetails'] = json.loads(item[3])
+            tx_parsed_details['parsedFloData'] = json.loads(item[5])
+            tx_parsed_details['parsedFloData']['transactionType'] = item[4]
+            tx_parsed_details['transactionDetails']['blockheight'] = int(item[2])
+            tempdict.append(tx_parsed_details)
+    else:
+        c.execute('''SELECT * FROM latestTransactions WHERE blockNumber IN (SELECT blockNumber FROM latestBlocks ORDER BY blockNumber DESC LIMIT 10) ORDER BY id ASC;''')
+        latestTransactions = c.fetchall()
+        c.close()
+        tempdict = []
+        for idx, item in enumerate(latestTransactions):
+            item = list(item)
+            tx_parsed_details = {}
+            tx_parsed_details['transactionDetails'] = json.loads(item[3])
+            tx_parsed_details['parsedFloData'] = json.loads(item[5])
+            tx_parsed_details['parsedFloData']['transactionType'] = item[4]
+            tx_parsed_details['transactionDetails']['blockheight'] = int(item[2])
+            tempdict.append(tx_parsed_details)
     return jsonify(result='ok', latestTransactions=tempdict, temp=item)
 
 
@@ -566,7 +582,7 @@ async def getLatestBlockDetails():
         c = conn.cursor()
     else:
         return 'Latest transactions db doesn\'t exist. This is unusual, please report on https://github.com/ranchimall/ranchimallflo-api'
-    c.execute('''SELECT * FROM ( SELECT * FROM latestBlocks ORDER BY id DESC LIMIT 4) ORDER BY id ASC;''')
+    c.execute('''SELECT * FROM ( SELECT * FROM latestBlocks ORDER BY blockNumber DESC LIMIT 4) ORDER BY id ASC;''')
     latestBlocks = c.fetchall()
     c.close()
     tempdict = []
