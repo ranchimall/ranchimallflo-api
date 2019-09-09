@@ -571,7 +571,7 @@ async def getLatestTransactionDetails():
             tx_parsed_details['parsedFloData']['transactionType'] = item[4]
             tx_parsed_details['transactionDetails']['blockheight'] = int(item[2])
             tempdict.append(tx_parsed_details)
-    return jsonify(result='ok', latestTransactions=tempdict, temp=item)
+    return jsonify(result='ok', latestTransactions=tempdict)
 
 
 @app.route('/api/v1.0/getLatestBlockDetails', methods=['GET'])
