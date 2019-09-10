@@ -546,7 +546,7 @@ async def getLatestTransactionDetails():
         return 'Latest transactions db doesn\'t exist. This is unusual, please report on https://github.com/ranchimall/ranchimallflo-api'
 
     if numberOfLatestBlocks is not None:
-        c.execute('SELECT * FROM latestTransactions WHERE blockNumber IN (SELECT blockNumber FROM latestBlocks ORDER BY blockNumber DESC LIMIT {}) ORDER BY id ASC;'.format(int(numberOfLatestBlocks)))
+        c.execute('SELECT * FROM latestTransactions WHERE blockNumber IN (SELECT DISTINCT blockNumber FROM latestTransactions ORDER BY blockNumber DESC LIMIT {}) ORDER BY id ASC;'.format(int(numberOfLatestBlocks)))
         latestTransactions = c.fetchall()
         c.close()
         tempdict = []
@@ -559,7 +559,7 @@ async def getLatestTransactionDetails():
             tx_parsed_details['transactionDetails']['blockheight'] = int(item[2])
             tempdict.append(tx_parsed_details)
     else:
-        c.execute('''SELECT * FROM latestTransactions WHERE blockNumber IN (SELECT blockNumber FROM latestBlocks ORDER BY blockNumber DESC LIMIT 10) ORDER BY id ASC;''')
+        c.execute('''SELECT * FROM latestTransactions WHERE blockNumber IN (SELECT DISTINCT blockNumber FROM latestTransactions ORDER BY blockNumber DESC LIMIT 10) ORDER BY id ASC;''')
         latestTransactions = c.fetchall()
         c.close()
         tempdict = []
