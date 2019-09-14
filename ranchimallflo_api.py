@@ -518,7 +518,7 @@ async def gettransactiondetails(transactionHash):
     blockdetails = json.loads(blockdetails.content)
 
     parseResult = parsing.parse_flodata(flodata, blockdetails)
-    return jsonify(parsingDetails=parseResult, transactionDetails=transactionDetails)
+    return jsonify(parsedFloData=parseResult, transactionDetails=transactionDetails)
 
 
 @app.route('/api/v1.0/getVscoutDetails', methods=['GET'])
