@@ -552,15 +552,27 @@ async def getsmartcontracttransactions():
         return jsonify(result='error', details='Smart Contract with the given name doesn\'t exist')
 
 
-@app.route('/api/v1.0/getBlockDetails/<blockno>', methods=['GET'])
-async def getblockdetails(blockno):
-    blockhash = requests.get('{}block-index/{}'.format(apiUrl,blockno))
-    blockhash = json.loads(blockhash.content)
+@app.route('/api/v1.0/getBlockDetails', methods=['GET'])
+async def getblockdetails():
+    blockHash = request.args.get('blockHash')
+    blockHeight = request.args.get('blockHeight')
 
-    blockdetails = requests.get('{}block/{}'.format(apiUrl,blockhash['blockHash']))
-    blockdetails = json.loads(blockdetails.content)
+    if blockHash is None and blockHeight is None:
+        return jsonify(result='error', details='Pass either blockHash or blockHeight')
 
-    return jsonify(blockdetails=blockdetails, blockno=blockno)
+    elif blockHash is not None and blockHeight is not None:
+        return jsonify(result='error', details='Pass either blockHash or blockHeight. Not both.')
+    elif blockHash:
+        blockdetails = requests.get('{}block/{}'.format(apiUrl,blockHash))
+        blockdetails = json.loads(blockdetails.content)
+        return jsonify(blockDetails=blockdetails, blockHash=blockHash)
+    elif blockHeight:
+        blockhash = requests.get('{}block-index/{}'.format(apiUrl,blockHeight))
+        blockhash = json.loads(blockhash.content)
+
+        blockdetails = requests.get('{}block/{}'.format(apiUrl,blockhash['blockHash']))
+        blockdetails = json.loads(blockdetails.content)
+        return jsonify(blockDetails=blockdetails, blockHeight=blockHeight)
 
 
 @app.route('/api/v1.0/getTransactionDetails/<transactionHash>', methods=['GET'])
@@ -645,6 +657,7 @@ async def gettransactiondetails(transactionHash):
 
     elif parseResult["type"] == "smartContractPays":
         print('smart contract pays')
+
 
     return jsonify(parsedFloData=parseResult, transactionDetails=transactionDetails, transactionHash=transactionHash)
 
