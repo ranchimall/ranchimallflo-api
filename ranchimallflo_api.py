@@ -66,6 +66,8 @@ async def getTokenTransactions():
     token = request.args.get('token')
     senderFloAddress = request.args.get('senderFloAddress')
     destFloAddress = request.args.get('destFloAddress')
+    limit = request.args.get('limit')
+
 
     if token is None:
         return jsonify(result='error')
@@ -79,28 +81,44 @@ async def getTokenTransactions():
         return 'Token doesn\'t exist'
 
     if senderFloAddress and not destFloAddress:
-        c.execute(
-            'SELECT blockNumber, sourceFloAddress, destFloAddress, transferAmount, blockchainReference FROM transactionHistory WHERE sourceFloAddress="{}" ORDER BY id DESC LIMIT 100'.format(
-                senderFloAddress))
+        if limit is None:
+            c.execute('SELECT blockNumber, sourceFloAddress, destFloAddress, transferAmount, blockchainReference FROM transactionHistory WHERE sourceFloAddress="{}" ORDER BY id DESC LIMIT 100'.format(senderFloAddress))
+        else:
+            c.execute('SELECT blockNumber, sourceFloAddress, destFloAddress, transferAmount, blockchainReference FROM transactionHistory WHERE sourceFloAddress="{}" ORDER BY id DESC LIMIT {}'.format(senderFloAddress,limit))
     elif not senderFloAddress and destFloAddress:
-        c.execute(
+        if limit is None:
+            c.execute(
             'SELECT blockNumber, sourceFloAddress, destFloAddress, transferAmount, blockchainReference FROM transactionHistory WHERE destFloAddress="{}" ORDER BY id DESC LIMIT 100'.format(
                 destFloAddress))
+        else:
+            c.execute(
+            'SELECT blockNumber, sourceFloAddress, destFloAddress, transferAmount, blockchainReference FROM transactionHistory WHERE destFloAddress="{}" ORDER BY id DESC LIMIT {}'.format(
+                destFloAddress, limit))
     elif senderFloAddress and destFloAddress:
-        c.execute(
+        if limit is None:
+            c.execute(
             'SELECT blockNumber, sourceFloAddress, destFloAddress, transferAmount, blockchainReference FROM transactionHistory WHERE sourceFloAddress="{}" AND destFloAddress="{}" ORDER BY id DESC LIMIT 100'.format(
                 senderFloAddress, destFloAddress))
+        else:
+            c.execute(
+            'SELECT blockNumber, sourceFloAddress, destFloAddress, transferAmount, blockchainReference FROM transactionHistory WHERE sourceFloAddress="{}" AND destFloAddress="{}" ORDER BY id DESC LIMIT {}'.format(
+                senderFloAddress, destFloAddress, limit))
+
 
     else:
-        c.execute(
+        if limit is None:
+            c.execute(
             'SELECT blockNumber, sourceFloAddress, destFloAddress, transferAmount, blockchainReference FROM transactionHistory ORDER BY id DESC LIMIT 100')
+        else:
+            c.execute(
+            'SELECT blockNumber, sourceFloAddress, destFloAddress, transferAmount, blockchainReference FROM transactionHistory ORDER BY id DESC LIMIT {}'.format(limit))
     latestTransactions = c.fetchall()
     conn.close()
     rowarray_list = []
     for row in latestTransactions:
         d = dict(zip(row.keys(), row))  # a dict with column names as keys
         rowarray_list.append(d)
-    return jsonify(result='ok', transactions=rowarray_list)
+    return jsonify(result='ok', token=token, transactions=rowarray_list)
 
 
 @app.route('/api/v1.0/getTokenBalances', methods=['GET'])
@@ -126,7 +144,7 @@ async def getTokenBalances():
         tempdict['balance'] = address[1]
         returnList.append(tempdict)
 
-    return jsonify(result='ok', balances=returnList)
+    return jsonify(result='ok', token=token, balances=returnList)
 
 
 @app.route('/api/v1.0/getFloAddressDetails', methods=['GET'])
@@ -189,6 +207,7 @@ async def getAddressBalance():
 @app.route('/api/v1.0/getFloAddressTransactions', methods=['GET'])
 async def getAddressTransactions():
     floAddress = request.args.get('floAddress')
+    limit = request.args.get('limit')
 
     if floAddress is None:
         return jsonify(result='error', description='floAddress has not been passed')
@@ -210,7 +229,10 @@ async def getAddressTransactions():
             tempdict = {}
             conn = sqlite3.connect(dblocation)
             c = conn.cursor()
-            c.execute('SELECT blockNumber, sourceFloAddress, destFloAddress, transferAmount, blockchainReference FROM transactionHistory ORDER BY id DESC LIMIT 100')
+            if limit is None:
+                c.execute('SELECT blockNumber, sourceFloAddress, destFloAddress, transferAmount, blockchainReference FROM transactionHistory ORDER BY id DESC LIMIT 100')
+            else:
+                c.execute('SELECT blockNumber, sourceFloAddress, destFloAddress, transferAmount, blockchainReference FROM transactionHistory ORDER BY id DESC LIMIT {}'.format(limit))
             latestTransactions = c.fetchall()
             conn.close()
 
@@ -372,7 +394,7 @@ async def getContractInfo():
                 if result[3]:
                     returnval['closeDate'] = result[3]
 
-        return jsonify(result='ok', contractInfo=returnval)
+        return jsonify(result='ok', contractName=contractName, contractAddress=contractAddress, contractInfo=returnval)
 
     else:
         return jsonify(result='error', details='Smart Contract with the given name doesn\'t exist')
@@ -404,7 +426,7 @@ async def getcontractparticipants():
         for row in result:
             returnval[row[0]] = {'participantFloAddress': row[1], 'tokenAmount': row[2], 'userChoice': row[3], 'transactionHash': row[4], 'winningAmount': row[5]}
 
-        return jsonify(result='ok', participantInfo=returnval)
+        return jsonify(result='ok', contractName=contractName, contractAddress=contractAddress, participantInfo=returnval)
 
     else:
         return jsonify(result='error', details='Smart Contract with the given name doesn\'t exist')
@@ -496,6 +518,40 @@ async def getParticipantDetails():
         return jsonify(result='error', details='System error. System db is missing')
 
 
+@app.route('/api/v1.0/getSmartContractTransactions', methods=['GET'])
+async def getsmartcontracttransactions():
+    contractName = request.args.get('contractName')
+    contractAddress = request.args.get('contractAddress')
+
+    if contractName is None:
+        return jsonify(result='error', details='Smart Contract\'s name hasn\'t been passed')
+
+    if contractAddress is None:
+        return jsonify(result='error', details='Smart Contract\'s address hasn\'t been passed')
+
+    contractDbName = '{}-{}.db'.format(contractName.strip(), contractAddress.strip())
+    filelocation = os.path.join(dbfolder, 'smartContracts', contractDbName)
+
+    if os.path.isfile(filelocation):
+        # Make db connection and fetch data
+        conn = sqlite3.connect(filelocation)
+        c = conn.cursor()
+        c.execute('select transactionHash from contractparticipants')
+        result = c.fetchall()
+        conn.close()
+        returnval = {}
+        for i,row in enumerate(result):
+            row = list(row)
+            transactionDetails = requests.get('https://ranchimallflo.duckdns.org/api/v1.0/getTransactionDetails/{}'.format(row[0]))
+            transactionDetails = json.loads(transactionDetails.content)
+            returnval[i] = transactionDetails
+
+        return jsonify(result='ok', contractName=contractName, contractAddress=contractAddress, contractTransactions=returnval)
+
+    else:
+        return jsonify(result='error', details='Smart Contract with the given name doesn\'t exist')
+
+
 @app.route('/api/v1.0/getBlockDetails/<blockno>', methods=['GET'])
 async def getblockdetails(blockno):
     blockhash = requests.get('{}block-index/{}'.format(apiUrl,blockno))
@@ -504,7 +560,7 @@ async def getblockdetails(blockno):
     blockdetails = requests.get('{}block/{}'.format(apiUrl,blockhash['blockHash']))
     blockdetails = json.loads(blockdetails.content)
 
-    return jsonify(blockdetails)
+    return jsonify(blockdetails=blockdetails, blockno=blockno)
 
 
 @app.route('/api/v1.0/getTransactionDetails/<transactionHash>', methods=['GET'])
@@ -512,13 +568,85 @@ async def gettransactiondetails(transactionHash):
     transactionDetails = requests.get('{}tx/{}'.format(apiUrl,transactionHash))
     transactionDetails = json.loads(transactionDetails.content)
 
+    if (len(transactionDetails['vin'])!=1) and (len(transactionDetails['vout']) not in [1,2]):
+        return jsonify(result='error', details='Transaction doesnt exist as part of the Token and Smart Contract system')
+
     flodata = transactionDetails['floData']
 
     blockdetails = requests.get('{}block/{}'.format(apiUrl,transactionDetails['blockhash']))
     blockdetails = json.loads(blockdetails.content)
 
     parseResult = parsing.parse_flodata(flodata, blockdetails)
-    return jsonify(parsedFloData=parseResult, transactionDetails=transactionDetails)
+
+    # now check what kind of transaction it is and if it exists in our database
+
+    if parseResult["type"] == "noise":
+        alert('Transaction is of the type noise')
+
+    elif parseResult["type"] == "tokenIncorporation":
+        # open db of the token specified and check if the transaction exists there
+        dblocation = os.path.join(dbfolder, 'tokens' , parseResult['tokenIdentification']+'.db')
+        print(dblocation)
+
+        if os.path.isfile(dblocation):
+            # Make db connection and fetch data
+            conn = sqlite3.connect(dblocation)
+            c = conn.cursor()
+            temp = c.execute('select transactionHash from transactionHistory where transactionHash="{}"'.format(transactionHash)).fetchall()
+
+            if len(temp) == 0:
+                return jsonify(result='error', details='Transaction doesnt exist as part of the Token and Smart Contract system')
+            elif len(temp) > 1:
+                return jsonify(result='error', details='More than 2 instances of this txid exists in the db. This is unusual, please report to the developers. https://github.com/ranchimall/floscout')
+
+
+    elif parseResult["type"] == "transfer":
+        if parseResult["transferType"] == "token":
+            # open db of the token specified and check if the transaction exists there
+            dblocation = os.path.join(dbfolder, 'tokens' , parseResult['tokenIdentification']+'.db')
+            print(dblocation)
+
+            if os.path.isfile(dblocation):
+                # Make db connection and fetch data
+                conn = sqlite3.connect(dblocation)
+                c = conn.cursor()
+                temp = c.execute('select transactionHash from transactionHistory where transactionHash="{}"'.format(transactionHash)).fetchall()
+
+                if len(temp) == 0:
+                    return jsonify(result='error', details='Transaction doesnt exist as part of the Token and Smart Contract system')
+                elif len(temp) > 1:
+                    return jsonify(result='error', details='More than 2 instances of this txid exists in the db. This is unusual, please report to the developers. https://github.com/ranchimall/floscout')
+
+        elif parseResult["transferType"] == "smartContract":
+            # find the address of smart contract
+            contractAddress = None
+
+            for voutItem in transactionDetails['vout']:
+                if voutItem['scriptPubKey']['addresses'][0] != transactionDetails['vin'][0]['addr']:
+                    contractAddress = voutItem['scriptPubKey']['addresses'][0];
+
+            # open db of the contract specified and check if the transaction exists there
+            dblocation = os.path.join(dbfolder, 'smartContracts' , parseResult['contractName'] + '-' + contractAddress + '.db')
+            print(dblocation)
+
+            if os.path.isfile(dblocation):
+                # Make db connection and fetch data
+                conn = sqlite3.connect(dblocation)
+                c = conn.cursor()
+                temp = c.execute('select transactionHash from contractparticipants where transactionHash="{}"'.format(transactionHash)).fetchall()
+
+                if len(temp) == 0:
+                    return jsonify(result='error', details='Transaction doesnt exist as part of the Token and Smart Contract system')
+                elif len(temp) > 1:
+                    return jsonify(result='error', details='More than 2 instances of this txid exists in the db. This is unusual, please report to the developers. https://github.com/ranchimall/floscout')
+
+    elif parseResult["type"] == "smartContractIncorporation":
+        print('smart contract incorporation')
+
+    elif parseResult["type"] == "smartContractPays":
+        print('smart contract pays')
+
+    return jsonify(parsedFloData=parseResult, transactionDetails=transactionDetails, transactionHash=transactionHash)
 
 
 @app.route('/api/v1.0/getVscoutDetails', methods=['GET'])
