@@ -659,7 +659,7 @@ async def gettransactiondetails(transactionHash):
         print('smart contract pays')
 
 
-    return jsonify(parsedFloData=parseResult, transactionDetails=transactionDetails, transactionHash=transactionHash)
+    return jsonify(parsedFloData=parseResult, transactionDetails=transactionDetails, transactionHash=transactionHash, result='ok')
 
 
 @app.route('/api/v1.0/getVscoutDetails', methods=['GET'])
