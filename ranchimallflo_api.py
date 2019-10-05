@@ -593,7 +593,7 @@ async def gettransactiondetails(transactionHash):
     # now check what kind of transaction it is and if it exists in our database
 
     if parseResult["type"] == "noise":
-        alert('Transaction is of the type noise')
+        return jsonify(result='error', description='Transaction is of the type noise')
 
     elif parseResult["type"] == "tokenIncorporation":
         # open db of the token specified and check if the transaction exists there
