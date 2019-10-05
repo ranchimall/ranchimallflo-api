@@ -222,6 +222,7 @@ async def getAddressTransactions():
     if len(tokenNames) != 0:
         allTransactionList = []
 
+
     for token in tokenNames:
         token = token[0]
         dblocation = dbfolder + '/tokens/' + str(token) + '.db'
@@ -230,9 +231,9 @@ async def getAddressTransactions():
             conn = sqlite3.connect(dblocation)
             c = conn.cursor()
             if limit is None:
-                c.execute('SELECT blockNumber, sourceFloAddress, destFloAddress, transferAmount, blockchainReference FROM transactionHistory ORDER BY id DESC LIMIT 100')
+                c.execute('SELECT blockNumber, sourceFloAddress, destFloAddress, transferAmount, blockchainReference, transactionHash FROM transactionHistory ORDER BY id DESC LIMIT 100')
             else:
-                c.execute('SELECT blockNumber, sourceFloAddress, destFloAddress, transferAmount, blockchainReference FROM transactionHistory ORDER BY id DESC LIMIT {}'.format(limit))
+                c.execute('SELECT blockNumber, sourceFloAddress, destFloAddress, transferAmount, blockchainReference, transactionHash FROM transactionHistory ORDER BY id DESC LIMIT {}'.format(limit))
             latestTransactions = c.fetchall()
             conn.close()
 
@@ -245,6 +246,7 @@ async def getAddressTransactions():
                 d['destFloAddress'] = row[2]
                 d['transferAmount'] = row[3]
                 d['blockchainReference'] = row[4]
+                d['transactionHash'] = row[5]
                 rowarray_list.append(d)
 
             tempdict['token'] = token
