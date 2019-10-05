@@ -82,36 +82,36 @@ async def getTokenTransactions():
 
     if senderFloAddress and not destFloAddress:
         if limit is None:
-            c.execute('SELECT blockNumber, sourceFloAddress, destFloAddress, transferAmount, blockchainReference FROM transactionHistory WHERE sourceFloAddress="{}" ORDER BY id DESC LIMIT 100'.format(senderFloAddress))
+            c.execute('SELECT blockNumber, sourceFloAddress, destFloAddress, transferAmount, blockchainReference, transactionHash FROM transactionHistory WHERE sourceFloAddress="{}" ORDER BY id DESC LIMIT 100'.format(senderFloAddress))
         else:
-            c.execute('SELECT blockNumber, sourceFloAddress, destFloAddress, transferAmount, blockchainReference FROM transactionHistory WHERE sourceFloAddress="{}" ORDER BY id DESC LIMIT {}'.format(senderFloAddress,limit))
+            c.execute('SELECT blockNumber, sourceFloAddress, destFloAddress, transferAmount, blockchainReference, transactionHash FROM transactionHistory WHERE sourceFloAddress="{}" ORDER BY id DESC LIMIT {}'.format(senderFloAddress,limit))
     elif not senderFloAddress and destFloAddress:
         if limit is None:
             c.execute(
-            'SELECT blockNumber, sourceFloAddress, destFloAddress, transferAmount, blockchainReference FROM transactionHistory WHERE destFloAddress="{}" ORDER BY id DESC LIMIT 100'.format(
+            'SELECT blockNumber, sourceFloAddress, destFloAddress, transferAmount, blockchainReference, transactionHash FROM transactionHistory WHERE destFloAddress="{}" ORDER BY id DESC LIMIT 100'.format(
                 destFloAddress))
         else:
             c.execute(
-            'SELECT blockNumber, sourceFloAddress, destFloAddress, transferAmount, blockchainReference FROM transactionHistory WHERE destFloAddress="{}" ORDER BY id DESC LIMIT {}'.format(
+            'SELECT blockNumber, sourceFloAddress, destFloAddress, transferAmount, blockchainReference, transactionHash FROM transactionHistory WHERE destFloAddress="{}" ORDER BY id DESC LIMIT {}'.format(
                 destFloAddress, limit))
     elif senderFloAddress and destFloAddress:
         if limit is None:
             c.execute(
-            'SELECT blockNumber, sourceFloAddress, destFloAddress, transferAmount, blockchainReference FROM transactionHistory WHERE sourceFloAddress="{}" AND destFloAddress="{}" ORDER BY id DESC LIMIT 100'.format(
+            'SELECT blockNumber, sourceFloAddress, destFloAddress, transferAmount, blockchainReference, transactionHash FROM transactionHistory WHERE sourceFloAddress="{}" AND destFloAddress="{}" ORDER BY id DESC LIMIT 100'.format(
                 senderFloAddress, destFloAddress))
         else:
             c.execute(
-            'SELECT blockNumber, sourceFloAddress, destFloAddress, transferAmount, blockchainReference FROM transactionHistory WHERE sourceFloAddress="{}" AND destFloAddress="{}" ORDER BY id DESC LIMIT {}'.format(
+            'SELECT blockNumber, sourceFloAddress, destFloAddress, transferAmount, blockchainReference, transactionHash FROM transactionHistory WHERE sourceFloAddress="{}" AND destFloAddress="{}" ORDER BY id DESC LIMIT {}'.format(
                 senderFloAddress, destFloAddress, limit))
 
 
     else:
         if limit is None:
             c.execute(
-            'SELECT blockNumber, sourceFloAddress, destFloAddress, transferAmount, blockchainReference FROM transactionHistory ORDER BY id DESC LIMIT 100')
+            'SELECT blockNumber, sourceFloAddress, destFloAddress, transferAmount, blockchainReference, transactionHash FROM transactionHistory ORDER BY id DESC LIMIT 100')
         else:
             c.execute(
-            'SELECT blockNumber, sourceFloAddress, destFloAddress, transferAmount, blockchainReference FROM transactionHistory ORDER BY id DESC LIMIT {}'.format(limit))
+            'SELECT blockNumber, sourceFloAddress, destFloAddress, transferAmount, blockchainReference, transactionHash FROM transactionHistory ORDER BY id DESC LIMIT {}'.format(limit))
     latestTransactions = c.fetchall()
     conn.close()
     rowarray_list = []
