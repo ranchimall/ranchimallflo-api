@@ -222,38 +222,39 @@ async def getAddressTransactions():
     if len(tokenNames) != 0:
         allTransactionList = []
 
+        for token in tokenNames:
+            token = token[0]
+            dblocation = dbfolder + '/tokens/' + str(token) + '.db'
+            if os.path.exists(dblocation):
+                tempdict = {}
+                conn = sqlite3.connect(dblocation)
+                c = conn.cursor()
+                if limit is None:
+                    c.execute('SELECT blockNumber, sourceFloAddress, destFloAddress, transferAmount, blockchainReference, transactionHash FROM transactionHistory ORDER BY id DESC LIMIT 100')
+                else:
+                    c.execute('SELECT blockNumber, sourceFloAddress, destFloAddress, transferAmount, blockchainReference, transactionHash FROM transactionHistory ORDER BY id DESC LIMIT {}'.format(limit))
+                latestTransactions = c.fetchall()
+                conn.close()
 
-    for token in tokenNames:
-        token = token[0]
-        dblocation = dbfolder + '/tokens/' + str(token) + '.db'
-        if os.path.exists(dblocation):
-            tempdict = {}
-            conn = sqlite3.connect(dblocation)
-            c = conn.cursor()
-            if limit is None:
-                c.execute('SELECT blockNumber, sourceFloAddress, destFloAddress, transferAmount, blockchainReference, transactionHash FROM transactionHistory ORDER BY id DESC LIMIT 100')
-            else:
-                c.execute('SELECT blockNumber, sourceFloAddress, destFloAddress, transferAmount, blockchainReference, transactionHash FROM transactionHistory ORDER BY id DESC LIMIT {}'.format(limit))
-            latestTransactions = c.fetchall()
-            conn.close()
+                rowarray_list = []
+                for row in latestTransactions:
+                    row = list(row)
+                    d = {}
+                    d['blockNumber'] = row[0]
+                    d['sourceFloAddress'] = row[1]
+                    d['destFloAddress'] = row[2]
+                    d['transferAmount'] = row[3]
+                    d['blockchainReference'] = row[4]
+                    d['transactionHash'] = row[5]
+                    rowarray_list.append(d)
 
-            rowarray_list = []
-            for row in latestTransactions:
-                row = list(row)
-                d = {}
-                d['blockNumber'] = row[0]
-                d['sourceFloAddress'] = row[1]
-                d['destFloAddress'] = row[2]
-                d['transferAmount'] = row[3]
-                d['blockchainReference'] = row[4]
-                d['transactionHash'] = row[5]
-                rowarray_list.append(d)
+                tempdict['token'] = token
+                tempdict['transactions'] = rowarray_list
+                allTransactionList.append(tempdict)
 
-            tempdict['token'] = token
-            tempdict['transactions'] = rowarray_list
-            allTransactionList.append(tempdict)
-
-    return jsonify(result='ok', floAddress=floAddress, allTransactions=allTransactionList)
+        return jsonify(result='ok', floAddress=floAddress, allTransactions=allTransactionList)
+    else:
+        return jsonify(result='error', description='No token transactions present present on this address')
 
 
 # SMART CONTRACT APIs
