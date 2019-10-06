@@ -806,6 +806,26 @@ async def getTokenSmartContractList():
     return jsonify(tokens=filelist, smartContracts=contractList, result='ok')
 
 
+@app.route('/api/v1.0/getSystemData', methods=['GET'])
+async def systemData():
+
+    # query for the number of flo addresses in tokenAddress mapping
+    conn = sqlite3.connect(os.path.join(dbfolder, 'system.db'))
+    c = conn.cursor()
+    tokenAddressCount = c.execute('select count(distinct tokenAddress) from tokenAddressMapping').fetchall()[0][0]
+    conn.close()
+
+    # query for total number of validated blocks
+    conn = sqlite3.connect(os.path.join(dbfolder, 'latestCache.db'))
+    c = conn.cursor()
+    validatedBlockCount = c.execute('select count(distinct blockNumber) from latestBlocks').fetchall()[0][0]
+    validatedTransactionCount = c.execute('select count(distinct transactionHash) from latestTransactions').fetchall()[0][0]
+    conn.close()
+
+    return jsonify(systemAddressCount=tokenAddressCount, systemBlockCount=validatedBlockCount, systemTransactionCount=validatedTransactionCount ,result='ok')
+
+
+
 @app.route('/test')
 async def test():
     return render_template('test.html')
