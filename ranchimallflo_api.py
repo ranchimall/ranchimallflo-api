@@ -721,7 +721,6 @@ async def getLatestTransactionDetails():
 async def getLatestBlockDetails():
 
     limit = request.args.get('limit')
-    int(limit)
 
     dblocation = dbfolder + '/latestCache.db'
     if os.path.exists(dblocation):
@@ -733,6 +732,7 @@ async def getLatestBlockDetails():
     if limit is None:
         c.execute('''SELECT * FROM ( SELECT * FROM latestBlocks ORDER BY blockNumber DESC LIMIT 4) ORDER BY id ASC;''')
     else:
+        int(limit)
         c.execute('SELECT * FROM ( SELECT * FROM latestBlocks ORDER BY blockNumber DESC LIMIT {}) ORDER BY id ASC;'.format(limit))
     latestBlocks = c.fetchall()
     c.close()
