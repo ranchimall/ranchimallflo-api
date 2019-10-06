@@ -813,6 +813,8 @@ async def systemData():
     conn = sqlite3.connect(os.path.join(dbfolder, 'system.db'))
     c = conn.cursor()
     tokenAddressCount = c.execute('select count(distinct tokenAddress) from tokenAddressMapping').fetchall()[0][0]
+    tokenCount = c.execute('select count(distinct token) from tokenAddressMapping').fetchall()[0][0]
+    contractCount = c.execute('select count(distinct contractName) from contractParticipantMapping').fetchall()[0][0]
     conn.close()
 
     # query for total number of validated blocks
@@ -822,7 +824,7 @@ async def systemData():
     validatedTransactionCount = c.execute('select count(distinct transactionHash) from latestTransactions').fetchall()[0][0]
     conn.close()
 
-    return jsonify(systemAddressCount=tokenAddressCount, systemBlockCount=validatedBlockCount, systemTransactionCount=validatedTransactionCount ,result='ok')
+    return jsonify(systemAddressCount=tokenAddressCount, systemBlockCount=validatedBlockCount, systemTransactionCount=validatedTransactionCount , systemSmartContractCount=contractCount, systemTokenCount=tokenCount, result='ok')
 
 
 
