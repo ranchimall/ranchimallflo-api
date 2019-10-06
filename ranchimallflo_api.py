@@ -702,7 +702,7 @@ async def getLatestTransactionDetails():
             tx_parsed_details['transactionDetails']['blockheight'] = int(item[2])
             tempdict.append(tx_parsed_details)
     else:
-        c.execute('''SELECT * FROM latestTransactions WHERE blockNumber IN (SELECT DISTINCT blockNumber FROM latestTransactions ORDER BY blockNumber DESC LIMIT 10) ORDER BY id ASC;''')
+        c.execute('''SELECT * FROM latestTransactions WHERE blockNumber IN (SELECT DISTINCT blockNumber FROM latestTransactions ORDER BY blockNumber DESC LIMIT 100) ORDER BY id ASC;''')
         latestTransactions = c.fetchall()
         c.close()
         tempdict = []
@@ -719,13 +719,21 @@ async def getLatestTransactionDetails():
 
 @app.route('/api/v1.0/getLatestBlockDetails', methods=['GET'])
 async def getLatestBlockDetails():
+
+    limit = request.args.get('limit')
+    int(limit)
+
     dblocation = dbfolder + '/latestCache.db'
     if os.path.exists(dblocation):
         conn = sqlite3.connect(dblocation)
         c = conn.cursor()
     else:
         return 'Latest transactions db doesn\'t exist. This is unusual, please report on https://github.com/ranchimall/ranchimallflo-api'
-    c.execute('''SELECT * FROM ( SELECT * FROM latestBlocks ORDER BY blockNumber DESC LIMIT 4) ORDER BY id ASC;''')
+
+    if limit is None:
+        c.execute('''SELECT * FROM ( SELECT * FROM latestBlocks ORDER BY blockNumber DESC LIMIT 4) ORDER BY id ASC;''')
+    else:
+        c.execute('SELECT * FROM ( SELECT * FROM latestBlocks ORDER BY blockNumber DESC LIMIT {}) ORDER BY id ASC;'.format(limit))
     latestBlocks = c.fetchall()
     c.close()
     tempdict = []
