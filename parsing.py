@@ -1,5 +1,9 @@
 import re
 import arrow
+import configparser
+
+config = configparser.ConfigParser()
+config.read('config.ini')
 
 marker = None
 operation = None
@@ -164,7 +168,7 @@ def extractContractConditions(text, contracttype, marker, blocktime):
     rulelist = []
     numberList = re.findall(r'\(\d\d*\)', rulestext)
 
-    for idx,item in enumerate(numberList):
+    for idx, item in enumerate(numberList):
         numberList[idx] = int(item[1:-1])
 
     numberList = sorted(numberList)
@@ -198,7 +202,7 @@ def extractContractConditions(text, contracttype, marker, blocktime):
                         return None
                     extractedRules['expiryTime'] = expirytime
                 except:
-                    print('Expiry time not in right format')
+                    print('Error parsing expiry time')
                     return None
 
         for rule in rulelist:
@@ -211,7 +215,7 @@ def extractContractConditions(text, contracttype, marker, blocktime):
                 try:
                     extractedRules['contractAmount'] = float(contractamount)
                 except:
-                    print("something is wrong with contract amount entered")
+                    print("Contract amount entered is not a decimal")
             elif rule[:11] == 'userchoices':
                 pattern = re.compile('[^userchoices\s*=\s*].*')
                 conditions = pattern.search(rule).group(0)
@@ -226,7 +230,7 @@ def extractContractConditions(text, contracttype, marker, blocktime):
                 try:
                     extractedRules['minimumsubscriptionamount'] = float(minimumsubscriptionamount)
                 except:
-                    print("something is wrong with minimum subscription amount entered")
+                    print("Minimum subscription amount entered is not a decimal")
             elif rule[:25] == 'maximumsubscriptionamount':
                 pattern = re.compile('[^maximumsubscriptionamount\s*=\s*].*')
                 searchResult = pattern.search(rule).group(0)
@@ -234,8 +238,8 @@ def extractContractConditions(text, contracttype, marker, blocktime):
                 try:
                     extractedRules['maximumsubscriptionamount'] = float(maximumsubscriptionamount)
                 except:
-                    print("something is wrong with maximum subscription amount entered")
-            elif rule[:12] == 'payeeAddress':
+                    print("Maximum subscription amount entered is not a decimal")
+            elif rule[:12] == 'payeeaddress':
                 pattern = re.compile('[^payeeAddress\s*=\s*].*')
                 searchResult = pattern.search(rule).group(0)
                 payeeAddress = searchResult.split(marker)[0]
@@ -258,7 +262,7 @@ def extractTriggerCondition(text):
 
 
 # Combine test
-def parse_flodata(string, blockinfo):
+def parse_flodata(string, blockinfo, netvariable):
 
     # todo Rule 20 - remove 'text:' from the start of flodata if it exists
     if string[0:5] == 'text:':
@@ -319,7 +323,7 @@ def parse_flodata(string, blockinfo):
                 parsed_data = {'type': 'noise'}
 
     # todo Rule 32 - if number of # is 1 and number of @ is 1, then process for smart contract transfer or creation
-    elif len(hashList)==1 and len(atList)==1:
+    elif len(hashList) == 1 and len(atList) == 1:
         # Passing the above check means Smart Contract creation or transfer
         incorporation = isIncorp(cleanstring)
         transfer = isTransfer(cleanstring)
@@ -334,13 +338,22 @@ def parse_flodata(string, blockinfo):
             contractaddress = extractAddress(nospacestring)
             contractconditions = extractContractConditions(cleanstring, contracttype, marker=hashList[0][:-1], blocktime=blockinfo['time'])
 
-            if None not in [contracttype, contractaddress, contractconditions]:
-                parsed_data = {'type': 'smartContractIncorporation', 'contractType': contracttype[:-1],
-                           'tokenIdentification': hashList[0][:-1], 'contractName': atList[0][:-1],
-                           'contractAddress': contractaddress[:-1], 'flodata': string,
-                           'contractConditions': contractconditions}
+            if config['DEFAULT']['NET'] == 'mainnet' and blockinfo['height'] < 3454510:
+                if None not in [contracttype, contractconditions]:
+                    parsed_data = {'type': 'smartContractIncorporation', 'contractType': contracttype[:-1],
+                               'tokenIdentification': hashList[0][:-1], 'contractName': atList[0][:-1],
+                               'contractAddress': contractaddress[:-1], 'flodata': string,
+                               'contractConditions': contractconditions}
+                else:
+                    parsed_data = {'type': 'noise'}
             else:
-                parsed_data = {'type': 'noise'}
+                if None not in [contracttype, contractaddress, contractconditions]:
+                    parsed_data = {'type': 'smartContractIncorporation', 'contractType': contracttype[:-1],
+                                   'tokenIdentification': hashList[0][:-1], 'contractName': atList[0][:-1],
+                                   'contractAddress': contractaddress[:-1], 'flodata': string,
+                                   'contractConditions': contractconditions}
+                else:
+                    parsed_data = {'type': 'noise'}
 
         # todo Rule 35 - if it is not incorporation and it is transfer, then extract smart contract amount to be locked and userPreference. If any of them is missing, then reject
         elif not incorporation and transfer:
@@ -367,7 +380,7 @@ def parse_flodata(string, blockinfo):
         if triggerCondition is not None:
             parsed_data = {'type': 'smartContractPays', 'contractName': atList[0][:-1], 'triggerCondition': triggerCondition.group().strip()[1:-1]}
         else:
-            parsed_data = {'type':'noise'}
+            parsed_data = {'type': 'noise'}
     else:
         parsed_data = {'type': 'noise'}
 
