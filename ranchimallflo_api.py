@@ -124,42 +124,43 @@ async def getTokenTransactions():
 
     if senderFloAddress and not destFloAddress:
         if limit is None:
-            c.execute('SELECT jsonData FROM transactionHistory WHERE sourceFloAddress="{}" ORDER BY id DESC LIMIT 100'.format(senderFloAddress))
+            c.execute('SELECT jsonData, parsedFloData FROM transactionHistory WHERE sourceFloAddress="{}" ORDER BY id DESC LIMIT 100'.format(senderFloAddress))
         else:
-            c.execute('SELECT jsonData FROM transactionHistory WHERE sourceFloAddress="{}" ORDER BY id DESC LIMIT {}'.format(senderFloAddress,limit))
+            c.execute('SELECT jsonData, parsedFloData FROM transactionHistory WHERE sourceFloAddress="{}" ORDER BY id DESC LIMIT {}'.format(senderFloAddress,limit))
     elif not senderFloAddress and destFloAddress:
         if limit is None:
             c.execute(
-            'SELECT jsonData FROM transactionHistory WHERE destFloAddress="{}" ORDER BY id DESC LIMIT 100'.format(
+            'SELECT jsonData, parsedFloData FROM transactionHistory WHERE destFloAddress="{}" ORDER BY id DESC LIMIT 100'.format(
                 destFloAddress))
         else:
             c.execute(
-            'SELECT jsonData FROM transactionHistory WHERE destFloAddress="{}" ORDER BY id DESC LIMIT {}'.format(
+            'SELECT jsonData, parsedFloData FROM transactionHistory WHERE destFloAddress="{}" ORDER BY id DESC LIMIT {}'.format(
                 destFloAddress, limit))
     elif senderFloAddress and destFloAddress:
         if limit is None:
             c.execute(
-            'SELECT jsonData FROM transactionHistory WHERE sourceFloAddress="{}" AND destFloAddress="{}" ORDER BY id DESC LIMIT 100'.format(
+            'SELECT jsonData, parsedFloData FROM transactionHistory WHERE sourceFloAddress="{}" AND destFloAddress="{}" ORDER BY id DESC LIMIT 100'.format(
                 senderFloAddress, destFloAddress))
         else:
             c.execute(
-            'SELECT jsonData FROM transactionHistory WHERE sourceFloAddress="{}" AND destFloAddress="{}" ORDER BY id DESC LIMIT {}'.format(
+            'SELECT jsonData, parsedFloData FROM transactionHistory WHERE sourceFloAddress="{}" AND destFloAddress="{}" ORDER BY id DESC LIMIT {}'.format(
                 senderFloAddress, destFloAddress, limit))
 
     else:
         if limit is None:
             c.execute(
-            'SELECT jsonData FROM transactionHistory ORDER BY id DESC LIMIT 100')
+            'SELECT jsonData, parsedFloData FROM transactionHistory ORDER BY id DESC LIMIT 100')
         else:
             c.execute(
-            'SELECT jsonData FROM transactionHistory ORDER BY id DESC LIMIT {}'.format(limit))
-    latestTransactions = c.fetchall()
+            'SELECT jsonData, parsedFloData FROM transactionHistory ORDER BY id DESC LIMIT {}'.format(limit))
+    transactionJsonData = c.fetchall()
     conn.close()
     rowarray_list = {}
-    for row in latestTransactions:
-        jsonData = row[row.keys()[0]]
-        jsonData = json.loads(jsonData)
-        rowarray_list[jsonData['txid']]=jsonData
+    for row in transactionJsonData:
+        temp = {}
+        temp['transactionDetails'] = json.loads(row[0])
+        temp['parseResult'] = json.loads(row[1])
+        rowarray_list[temp['transactionDetails']['txid']] = temp
     return jsonify(result='ok', token=token, transactions=rowarray_list)
 
 
@@ -296,7 +297,7 @@ async def getAddressBalance():
 
 
 @app.route('/api/v1.0/getFloAddressTransactions', methods=['GET'])
-async def getAddressTransactions():
+async def getFloAddressTransactions():
     floAddress = request.args.get('floAddress')
     token = request.args.get('token')
     limit = request.args.get('limit')
@@ -308,9 +309,9 @@ async def getAddressTransactions():
         dblocation = dbfolder + '/system.db'
         if os.path.exists(dblocation):
             conn = sqlite3.connect(dblocation)
-        c = conn.cursor()
-        c.execute('select token from tokenAddressMapping where tokenAddress="{}"'.format(floAddress))
-        tokenNames = c.fetchall()
+            c = conn.cursor()
+            c.execute('select token from tokenAddressMapping where tokenAddress="{}"'.format(floAddress))
+            tokenNames = c.fetchall()
     else:
         dblocation = dbfolder + '/tokens/' + str(token) + '.db'
         if os.path.exists(dblocation):
@@ -330,17 +331,17 @@ async def getAddressTransactions():
                 conn = sqlite3.connect(dblocation)
                 c = conn.cursor()
                 if limit is None:
-                    c.execute('SELECT jsonData FROM transactionHistory WHERE sourceFloAddress="{}" OR destFloAddress="{}" ORDER BY id DESC LIMIT 100'.format(floAddress, floAddress))
+                    c.execute('SELECT jsonData, parsedFloData FROM transactionHistory WHERE sourceFloAddress="{}" OR destFloAddress="{}" ORDER BY id DESC LIMIT 100'.format(floAddress, floAddress))
                 else:
-                    c.execute('SELECT jsonData FROM transactionHistory WHERE sourceFloAddress="{}" OR destFloAddress="{}" ORDER BY id DESC LIMIT {}'.format(floAddress, floAddress, limit))
-                latestTransactions = c.fetchall()
+                    c.execute('SELECT jsonData, parsedFloData FROM transactionHistory WHERE sourceFloAddress="{}" OR destFloAddress="{}" ORDER BY id DESC LIMIT {}'.format(floAddress, floAddress, limit))
+                transactionJsonData = c.fetchall()
                 conn.close()
 
-                rowarray_list = []
-                for row in latestTransactions:
-                    row = json.loads(row[0])
-                    row['token'] = str(tokenname)
-                    allTransactionList[row['txid']] = row
+                for row in transactionJsonData:
+                    temp = {}
+                    temp['transactionDetails'] = json.loads(row[0])
+                    temp['parseResult'] = json.loads(row[1])
+                    allTransactionList[temp['transactionDetails']['txid']] = temp
 
         if token is None:
             return jsonify(result='ok', floAddress=floAddress, transactions=allTransactionList)
@@ -750,14 +751,17 @@ async def getsmartcontracttransactions():
         # Make db connection and fetch data
         conn = sqlite3.connect(filelocation)
         c = conn.cursor()
-        c.execute('select jsonData from contractTransactionHistory')
+        c.execute('select jsonData, parsedFloData from contractTransactionHistory')
         result = c.fetchall()
         conn.close()
         returnval = {}
 
-        for transaction in result:
-            transactionJson = json.loads(transaction[0])
-            returnval[transactionJson['txid']] = transactionJson
+        for item in result:
+            temp = {}
+            temp['transactionDetails'] = json.loads(item[0])
+            temp['parseResult'] = json.loads(item[1])
+            returnval[temp['transactionDetails']['txid']] = temp
+
         return jsonify(result='ok', contractName=contractName, contractAddress=contractAddress, contractTransactions=returnval)
 
     else:
