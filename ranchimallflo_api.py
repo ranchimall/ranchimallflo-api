@@ -3,6 +3,7 @@ import sqlite3
 import json
 import os
 import requests
+import sys
 
 from quart import jsonify, make_response, Quart, render_template, request, flash, redirect, url_for
 from quart import Quart
@@ -39,7 +40,7 @@ def retryRequest(tempserverlist, apicall):
                 tempserverlist.pop(0)
                 return retryRequest(tempserverlist, apicall)
     else:
-        logger.error("None of the APIs are responding for the call {}".format(apicall))
+        print("None of the APIs are responding for the call {}".format(apicall))
         sys.exit(0)
 
 
@@ -69,7 +70,7 @@ async def getTokenInfo():
     token = request.args.get('token')
 
     if token is None:
-        return jsonify(result='error')
+        return jsonify(result='error', description='token name hasnt been passed')
 
     dblocation = dbfolder + '/tokens/' + str(token) + '.db'
     if os.path.exists(dblocation):
@@ -112,7 +113,7 @@ async def getTokenTransactions():
     limit = request.args.get('limit')
 
     if token is None:
-        return jsonify(result='error')
+        return jsonify(result='error', description='token name hasnt been passed')
 
     dblocation = dbfolder + '/tokens/' + str(token) + '.db'
     if os.path.exists(dblocation):
@@ -159,7 +160,7 @@ async def getTokenTransactions():
     for row in transactionJsonData:
         temp = {}
         temp['transactionDetails'] = json.loads(row[0])
-        temp['parseResult'] = json.loads(row[1])
+        temp['parsedFloData'] = json.loads(row[1])
         rowarray_list[temp['transactionDetails']['txid']] = temp
     return jsonify(result='ok', token=token, transactions=rowarray_list)
 
@@ -168,7 +169,7 @@ async def getTokenTransactions():
 async def getTokenBalances():
     token = request.args.get('token')
     if token is None:
-        return jsonify(result='error')
+        return jsonify(result='error', description='token name hasnt been passed')
 
     dblocation = dbfolder + '/tokens/' + str(token) + '.db'
     if os.path.exists(dblocation):
@@ -340,7 +341,7 @@ async def getFloAddressTransactions():
                 for row in transactionJsonData:
                     temp = {}
                     temp['transactionDetails'] = json.loads(row[0])
-                    temp['parseResult'] = json.loads(row[1])
+                    temp['parsedFloData'] = json.loads(row[1])
                     allTransactionList[temp['transactionDetails']['txid']] = temp
 
         if token is None:
@@ -452,10 +453,10 @@ async def getContractInfo():
     contractAddress = request.args.get('contractAddress')
 
     if contractName is None:
-        return jsonify(result='error', details='Smart Contract\'s name hasn\'t been passed')
+        return jsonify(result='error', description='Smart Contract\'s name hasn\'t been passed')
 
     if contractAddress is None:
-        return jsonify(result='error', details='Smart Contract\'s address hasn\'t been passed')
+        return jsonify(result='error', description='Smart Contract\'s address hasn\'t been passed')
 
     contractDbName = '{}-{}.db'.format(contractName.strip(), contractAddress.strip())
     filelocation = os.path.join(dbfolder, 'smartContracts', contractDbName)
@@ -541,7 +542,7 @@ async def getContractInfo():
                             returnval['numberOfWinners'] = len(winnerparticipants)
 
                 else:
-                    return jsonify(result='error', details='There is more than 1 trigger in the database for the smart contract. Please check your code, this shouldnt happen')
+                    return jsonify(result='error', description='There is more than 1 trigger in the database for the smart contract. Please check your code, this shouldnt happen')
 
 
         return jsonify(result='ok', contractName=contractName, contractAddress=contractAddress, contractInfo=returnval)
@@ -556,10 +557,10 @@ async def getcontractparticipants():
     contractAddress = request.args.get('contractAddress')
 
     if contractName is None:
-        return jsonify(result='error', details='Smart Contract\'s name hasn\'t been passed')
+        return jsonify(result='error', description='Smart Contract\'s name hasn\'t been passed')
 
     if contractAddress is None:
-        return jsonify(result='error', details='Smart Contract\'s address hasn\'t been passed')
+        return jsonify(result='error', description='Smart Contract\'s address hasn\'t been passed')
 
     contractDbName = '{}-{}.db'.format(contractName.strip(), contractAddress.strip())
     filelocation = os.path.join(dbfolder, 'smartContracts', contractDbName)
@@ -592,6 +593,9 @@ async def getcontractparticipants():
             trigger = c.fetchall()
 
             if len(trigger) == 1:
+                c.execute('select value from contractstructure where attribute="tokenIdentification"');
+                token = c.fetchall()
+                token = token[0][0]
                 c.execute(
                     'SELECT id,participantAddress, tokenAmount, userChoice, transactionHash, winningAmount FROM contractparticipants')
                 result = c.fetchall()
@@ -599,7 +603,7 @@ async def getcontractparticipants():
                 returnval = {}
                 for row in result:
                     returnval[row[1]] = {'participantFloAddress': row[1], 'tokenAmount': row[2], 'userChoice': row[3],
-                                         'transactionHash': row[4], 'winningAmount': row[5]}
+                                         'transactionHash': row[4], 'winningAmount': row[5], 'tokenIdentification':token}
 
                 return jsonify(result='ok', contractName=contractName, contractAddress=contractAddress,
                                participantInfo=returnval)
@@ -632,7 +636,7 @@ async def getcontractparticipants():
             return jsonify(result='ok', contractName=contractName, contractAddress=contractAddress,
                            participantInfo=returnval)
     else:
-        return jsonify(result='error', details='Smart Contract with the given name doesn\'t exist')
+        return jsonify(result='error', description='Smart Contract with the given name doesn\'t exist')
 
 
 @app.route('/api/v1.0/getParticipantDetails', methods=['GET'])
@@ -642,11 +646,11 @@ async def getParticipantDetails():
     contractAddress = request.args.get('contractAddress')
 
     if floAddress is None:
-        return jsonify(result='error', details='FLO address hasn\'t been passed')
+        return jsonify(result='error', description='FLO address hasn\'t been passed')
     dblocation = os.path.join(dbfolder, 'system.db')
 
     if (contractName and contractAddress is None) or (contractName is None and contractAddress):
-        return jsonify(result='error', details='pass both, contractName and contractAddress as url parameters')
+        return jsonify(result='error', description='pass both, contractName and contractAddress as url parameters')
 
     if os.path.isfile(dblocation):
         # Make db connection and fetch data
@@ -728,9 +732,9 @@ async def getParticipantDetails():
                 participationDetailsList.append(detailsDict)
             return jsonify(result='ok', floAddress=floAddress, type='participant', participatedContracts=participationDetailsList)
         else:
-            return jsonify(result='error', details='Address hasn\'t participanted in any other contract')
+            return jsonify(result='error', description='Address hasn\'t participanted in any other contract')
     else:
-        return jsonify(result='error', details='System error. System db is missing')
+        return jsonify(result='error', description='System error. System db is missing')
 
 
 @app.route('/api/v1.0/getSmartContractTransactions', methods=['GET'])
@@ -739,10 +743,10 @@ async def getsmartcontracttransactions():
     contractAddress = request.args.get('contractAddress')
 
     if contractName is None:
-        return jsonify(result='error', details='Smart Contract\'s name hasn\'t been passed')
+        return jsonify(result='error', description='Smart Contract\'s name hasn\'t been passed')
 
     if contractAddress is None:
-        return jsonify(result='error', details='Smart Contract\'s address hasn\'t been passed')
+        return jsonify(result='error', description='Smart Contract\'s address hasn\'t been passed')
 
     contractDbName = '{}-{}.db'.format(contractName.strip(), contractAddress.strip())
     filelocation = os.path.join(dbfolder, 'smartContracts', contractDbName)
@@ -759,13 +763,13 @@ async def getsmartcontracttransactions():
         for item in result:
             temp = {}
             temp['transactionDetails'] = json.loads(item[0])
-            temp['parseResult'] = json.loads(item[1])
+            temp['parsedFloData'] = json.loads(item[1])
             returnval[temp['transactionDetails']['txid']] = temp
 
         return jsonify(result='ok', contractName=contractName, contractAddress=contractAddress, contractTransactions=returnval)
 
     else:
-        return jsonify(result='error', details='Smart Contract with the given name doesn\'t exist')
+        return jsonify(result='error', description='Smart Contract with the given name doesn\'t exist')
 
 
 @app.route('/api/v1.0/getBlockDetails/<blockdetail>', methods=['GET'])
@@ -792,7 +796,7 @@ async def getblockdetails(blockdetail):
         blockJson = json.loads(blockJson[0][0])
         return jsonify(result='ok', blockDetails=blockJson)
     else:
-        return jsonify(result='error', details='Block doesn\'t exist in database')
+        return jsonify(result='error', description='Block doesn\'t exist in database')
 
 
 @app.route('/api/v1.0/getTransactionDetails/<transactionHash>', methods=['GET'])
@@ -811,7 +815,7 @@ async def gettransactiondetails(transactionHash):
 
         return jsonify(parsedFloData=parseResult, transactionDetails=transactionJson, transactionHash=transactionHash, result='ok')
     else:
-        return jsonify(result='error', details='Transaction doesn\'t exist in database')
+        return jsonify(result='error', description='Transaction doesn\'t exist in database')
 
 
 @app.route('/api/v1.0/getLatestTransactionDetails', methods=['GET'])
