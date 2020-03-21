@@ -4,3 +4,4 @@ wsgi.py
 config.py
 .idea/
 py3.7/
+*.db
