@@ -1110,7 +1110,7 @@ def updatePrices():
         f"https://api.exchangeratesapi.io/latest?base=USD&symbols=INR")
     try:
         price = response.json()
-        prices['USDINR'] = price['quotes']['USDINR']
+        prices['USDINR'] = price['rates']['INR']
     except ValueError:
         response = requests.get(
             f"https://api.exchangerate-api.com/v4/latest/usd")
@@ -1198,7 +1198,7 @@ if not os.path.isfile(f"system.db"):
 
 # assign a scheduler for updating prices in the background
 scheduler = BackgroundScheduler()
-scheduler.add_job(func=updatePrices, trigger="interval", seconds=30)
+scheduler.add_job(func=updatePrices, trigger="interval", seconds=600)
 scheduler.start()
 # Shut down the scheduler when exiting the app
 atexit.register(lambda: scheduler.shutdown())
