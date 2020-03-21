@@ -1104,42 +1104,66 @@ async def getPriceData():
 ''' Stuff required for getPrices endpoint '''
 def updatePrices():
     prices = {}
-    # apilayer
+
+    # USD -> INR
     response = requests.get(
-        f"http://apilayer.net/api/live?access_key={apilayerAccesskey}")
+        f"https://api.exchangeratesapi.io/latest?base=USD&symbols=INR")
     try:
         price = response.json()
         prices['USDINR'] = price['quotes']['USDINR']
     except ValueError:
-        print('Json parse error')    
-
-
-    # bitpay
-    response = requests.get('https://bitpay.com/api/rates')
-    try:
-        bitcoinRates = response.json()
-        for currency in bitcoinRates:
-            if currency['code'] == 'USD':
-                prices['BTCUSD'] = currency['rate']
-            elif currency['code'] == 'INR':
-                prices['BTCINR'] = currency['rate']
-    except ValueError:
-        # coindesk
-        response = requests.get('https://api.coindesk.com/v1/bpi/currentprice.json')
+        response = requests.get(
+            f"https://api.exchangerate-api.com/v4/latest/usd")
         try:
             price = response.json()
-            prices['BTCUSD'] = price['bpi']['USD']['rate']
+            prices['USDINR'] = price['rates']['INR']
         except ValueError:
-            print('Json parse error')
+            response = requests.get(
+                f"https://api.ratesapi.io/api/latest?base=USD&symbols=INR")
+            try:
+                price = response.json()
+                prices['USDINR'] = price['rates']['INR']
+            except ValueError:
+                # todo : add logger to the application 
+                print('USD to Fiat APIs arent responding')
+    
 
-
-    # cryptocompare 
-    response = requests.get('https://min-api.cryptocompare.com/data/histoday?fsym=FLO&tsym=USD&limit=1&aggregate=3&e=CCCAGG')
+    # Blockchain stuff : BTC,FLO -> USD,INR
+    response = requests.get(
+        f"https://api.coingecko.com/api/v3/simple/price?ids=bitcoin,flo&vs_currencies=usd,inr")
     try:
         price = response.json()
-        prices['FLOUSD'] = price['Data'][-1]['close']
-    except ValueError:
-        print('Json parse error')    
+        prices['BTCUSD'] = price['bitcoin']['usd']
+        prices['BTCINR'] = price['bitcoin']['inr']
+        prices['FLOUSD'] = price['flo']['usd']
+        prices['FLOINR'] = price['flo']['inr']
+    except ValueError: 
+        response1 = requests.get(
+            f"https://api.coinlore.net/api/ticker/?id=90")
+        response2 = requests.get(
+            f"https://api.coinlore.net/api/ticker/?id=67")
+        try:
+            price1 = response1.json()
+            price2 = response2.json()
+            prices['BTCUSD'] = price1[0]['price_usd']
+            prices['BTCINR'] = price1[0]['price_usd'] * prices['USDINR']
+            prices['FLOUSD'] = price2[0]['price_usd']
+            prices['FLOINR'] = price2[0]['price_usd'] * prices['USDINR']
+        except ValueError:
+            response1 = requests.get(
+                f"https://api.coinpaprika.com/v1/tickers/btc-bitcoin")
+            response2 = requests.get(
+                f"https://api.coinpaprika.com/v1/tickers/flo-flo")
+            try:
+                price1 = response1.json()
+                price2 = response2.json()
+                prices['BTCUSD'] = price1['quotes']['usd']['price']
+                prices['BTCINR'] = price1['quotes']['usd']['price'] * prices['USDINR']
+                prices['FLOUSD'] = price2['quotes']['usd']['price']
+                prices['FLOINR'] = price2['quotes']['usd']['price'] * prices['USDINR']
+            except ValueError:
+                # todo : add logger to the application
+                print('Blockchain to Fiat APIs arent responding')
 
 
     # 3. update latest price data
@@ -1163,8 +1187,9 @@ if not os.path.isfile(f"system.db"):
     c.execute("INSERT INTO ratepairs(ratepair, price) VALUES ('BTCBTC', 1)")
     c.execute("INSERT INTO ratepairs(ratepair, price) VALUES ('BTCUSD', -1)")
     c.execute("INSERT INTO ratepairs(ratepair, price) VALUES ('BTCINR', -1)")
-    c.execute("INSERT INTO ratepairs(ratepair, price) VALUES ('USDINR', -1)")
     c.execute("INSERT INTO ratepairs(ratepair, price) VALUES ('FLOUSD', -1)")
+    c.execute("INSERT INTO ratepairs(ratepair, price) VALUES ('FLOINR', -1)")
+    c.execute("INSERT INTO ratepairs(ratepair, price) VALUES ('USDINR', -1)")
     conn.commit()
     conn.close()
     
