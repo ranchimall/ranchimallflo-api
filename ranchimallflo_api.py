@@ -4,7 +4,7 @@ import json
 import os
 import requests
 import sys
-import time 
+import time
 from datetime import datetime
 from quart import jsonify, make_response, Quart, render_template, request, flash, redirect, url_for
 from quart_cors import cors
@@ -56,6 +56,39 @@ def multiRequest(apicall, net):
         return retryRequest(testserverlist, apicall)
 
 
+def blockdetailhelper(blockdetail):
+    if blockdetail.isdigit():
+        blockHash = None
+        blockHeight = int(blockdetail)
+    else:
+        blockHash = str(blockdetail)
+        blockHeight = None
+
+    # open the latest block database
+    conn = sqlite3.connect(os.path.join(dbfolder, 'latestCache.db'))
+    c = conn.cursor()
+
+    if blockHash:
+        c.execute(
+            f"select jsonData from latestBlocks where blockHash='{blockHash}'")
+    elif blockHeight:
+        c.execute(
+            f"select jsonData from latestBlocks where blockNumber='{blockHeight}'")
+
+    blockJson = c.fetchall()
+    return blockJson
+
+def transactiondetailhelper(transactionHash):
+    # open the latest block database
+    conn = sqlite3.connect(os.path.join(dbfolder, 'latestCache.db'))
+    c = conn.cursor()
+
+    c.execute(
+        f"select jsonData,parsedFloData from latestTransactions where transactionHash='{transactionHash}'")
+    transactionJsonData = c.fetchall()
+
+    return transactionJsonData
+
 # FLO TOKEN APIs
 
 @app.route('/api/v1.0/getTokenList', methods=['GET'])
@@ -104,7 +137,7 @@ async def getTokenInfo():
         associatedContractList.append(tempdict)
 
     return jsonify(result='ok', token=token, incorporationAddress=incorporationRow[1], tokenSupply=incorporationRow[3],
-                   transactionHash=incorporationRow[6], blockchainReference=incorporationRow[7],
+                   time=incorporationRow[6], blockchainReference=incorporationRow[7],
                    activeAddress_no=numberOf_distinctAddresses, totalTransactions=numberOf_transactions, associatedSmartContracts=associatedContractList)
 
 
@@ -799,26 +832,8 @@ async def getsmartcontracttransactions():
 
 @app.route('/api/v1.0/getBlockDetails/<blockdetail>', methods=['GET'])
 async def getblockdetails(blockdetail):
-
-    if blockdetail.isdigit():
-        blockHash = None
-        blockHeight = int(blockdetail)
-    else:
-        blockHash = str(blockdetail)
-        blockHeight = None
-
-    # open the latest block database
-    conn = sqlite3.connect(os.path.join(dbfolder, 'latestCache.db'))
-    c = conn.cursor()
-
-    if blockHash:
-        c.execute(
-            f"select jsonData from latestBlocks where blockHash='{blockHash}'")
-    elif blockHeight:
-        c.execute(
-            f"select jsonData from latestBlocks where blockNumber='{blockHeight}'")
-
-    blockJson = c.fetchall()
+    
+    blockJson = blockdetailhelper(blockdetail)
     if len(blockJson) != 0:
         blockJson = json.loads(blockJson[0][0])
         return jsonify(result='ok', blockDetails=blockJson)
@@ -829,13 +844,7 @@ async def getblockdetails(blockdetail):
 @app.route('/api/v1.0/getTransactionDetails/<transactionHash>', methods=['GET'])
 async def gettransactiondetails(transactionHash):
 
-    # open the latest block database
-    conn = sqlite3.connect(os.path.join(dbfolder, 'latestCache.db'))
-    c = conn.cursor()
-
-    c.execute(
-        f"select jsonData,parsedFloData from latestTransactions where transactionHash='{transactionHash}'")
-    transactionJsonData = c.fetchall()
+    transactionJsonData = transactiondetailhelper(transactionHash)
 
     if len(transactionJsonData) != 0:
         transactionJson = json.loads(transactionJsonData[0][0])
@@ -914,6 +923,26 @@ async def getLatestBlockDetails():
     for idx, item in enumerate(latestBlocks):
         tempdict[json.loads(item[3])['hash']] = json.loads(item[3])
     return jsonify(result='ok', latestBlocks=tempdict)
+
+
+@app.route('/api/v1.0/getBlockTransactions/<blockdetail>', methods=['GET'])
+async def getblocktransactions(blockdetail):
+    blockJson = blockdetailhelper(blockdetail)
+    if len(blockJson) != 0:
+        blockJson = json.loads(blockJson[0][0])
+        blocktxlist = blockJson['tx']
+        blocktxs = {}
+        for i in range(len(blocktxlist)):
+            temptx = transactiondetailhelper(blocktxlist[i])                        
+            transactionJson = json.loads(temptx[0][0])
+            parseResult = json.loads(temptx[0][1])
+            blocktxs[blocktxlist[i]] = {
+                "parsedFloData" : parseResult,
+                "transactionDetails" : transactionJson
+            }
+        return jsonify(result='ok', transactions=blocktxs, blockKeyword=blockdetail)
+    else:
+        return jsonify(result='error', description='Block doesn\'t exist in database')
 
 
 @app.route('/api/v1.0/categoriseString/<urlstring>')
@@ -998,6 +1027,7 @@ async def systemData():
         'select count(distinct token) from tokenAddressMapping').fetchall()[0][0]
     contractCount = c.execute(
         'select count(distinct contractName) from contractAddressMapping').fetchall()[0][0]
+    lastscannedblock = int(c.execute("select value from systemData where attribute=='lastblockscanned'").fetchall()[0][0])
     conn.close()
 
     # query for total number of validated blocks
@@ -1009,7 +1039,7 @@ async def systemData():
         'select count(distinct transactionHash) from latestTransactions').fetchall()[0][0]
     conn.close()
 
-    return jsonify(systemAddressCount=tokenAddressCount, systemBlockCount=validatedBlockCount, systemTransactionCount=validatedTransactionCount, systemSmartContractCount=contractCount, systemTokenCount=tokenCount, result='ok')
+    return jsonify(systemAddressCount=tokenAddressCount, systemBlockCount=validatedBlockCount, systemTransactionCount=validatedTransactionCount, systemSmartContractCount=contractCount, systemTokenCount=tokenCount, lastscannedblock=lastscannedblock, result='ok')
 
 
 @app.route('/test')
@@ -1100,8 +1130,9 @@ async def getPriceData():
     return jsonify(prices=prices, result='ok')
 
 
-
 ''' Stuff required for getPrices endpoint '''
+
+
 def updatePrices():
     prices = {}
 
@@ -1124,9 +1155,8 @@ def updatePrices():
                 price = response.json()
                 prices['USDINR'] = price['rates']['INR']
             except ValueError:
-                # todo : add logger to the application 
+                # todo : add logger to the application
                 print('USD to Fiat APIs arent responding')
-    
 
     # Blockchain stuff : BTC,FLO -> USD,INR
     response = requests.get(
@@ -1137,7 +1167,7 @@ def updatePrices():
         prices['BTCINR'] = price['bitcoin']['inr']
         prices['FLOUSD'] = price['flo']['usd']
         prices['FLOINR'] = price['flo']['inr']
-    except ValueError: 
+    except ValueError:
         response1 = requests.get(
             f"https://api.coinlore.net/api/ticker/?id=90")
         response2 = requests.get(
@@ -1158,13 +1188,14 @@ def updatePrices():
                 price1 = response1.json()
                 price2 = response2.json()
                 prices['BTCUSD'] = price1['quotes']['usd']['price']
-                prices['BTCINR'] = price1['quotes']['usd']['price'] * prices['USDINR']
+                prices['BTCINR'] = price1['quotes']['usd']['price'] * \
+                    prices['USDINR']
                 prices['FLOUSD'] = price2['quotes']['usd']['price']
-                prices['FLOINR'] = price2['quotes']['usd']['price'] * prices['USDINR']
+                prices['FLOINR'] = price2['quotes']['usd']['price'] * \
+                    prices['USDINR']
             except ValueError:
                 # todo : add logger to the application
                 print('Blockchain to Fiat APIs arent responding')
-
 
     # 3. update latest price data
     print('Prices updated at time: %s' % datetime.now())
@@ -1174,12 +1205,14 @@ def updatePrices():
     c = conn.cursor()
     for pair in list(prices.items()):
         pair = list(pair)
-        c.execute(f"UPDATE ratepairs SET price={pair[1]} WHERE ratepair='{pair[0]}'")
+        c.execute(
+            f"UPDATE ratepairs SET price={pair[1]} WHERE ratepair='{pair[0]}'")
     conn.commit()
 
-# if system.db isn't present, initialize it 
+
+# if system.db isn't present, initialize it
 if not os.path.isfile(f"system.db"):
-    # create an empty db 
+    # create an empty db
     conn = sqlite3.connect('system.db')
     c = conn.cursor()
     c.execute('''CREATE TABLE ratepairs
@@ -1192,7 +1225,7 @@ if not os.path.isfile(f"system.db"):
     c.execute("INSERT INTO ratepairs(ratepair, price) VALUES ('USDINR', -1)")
     conn.commit()
     conn.close()
-    
+
     # update the prices once
     updatePrices()
 
