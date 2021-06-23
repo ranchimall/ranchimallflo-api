@@ -49,6 +49,24 @@ Output:
 }
 ```
 
+Python example code
+```
+response = requests.get('https://ranchimallflo.duckdns.org/api/v1.0/getTokenList')
+if response.status_code == 200:
+    json_response = response.json()
+elif response.status_code == 404:
+    print('Not Found.')
+```
+
+Javascript example code
+```
+fetch('https://ranchimallflo.duckdns.org/api/v1.0/getTokenList'){
+        .then(response => response.json())
+        .then(data => console.log(data));
+}
+```
+
+
 ### Information about a token
 Get information about a token on the FLO blockchain 
 ```
@@ -64,6 +82,23 @@ Output:
   "token": "rmt",
   "tokenSupply": 21000000,
   "transactionHash": "a74a03ec1e77fa50e0b586b1e9745225ad4f78ce96ca59d6ac025f8057dd095c"
+}
+```
+
+Python example code
+```
+response = requests.get('https://ranchimallflo.duckdns.org/api/v1.0/getTokenInfo?token=rmt')
+if response.status_code == 200:
+    json_response = response.json()
+elif response.status_code == 404:
+    print('Not Found.')
+```
+
+Javascript example code
+```
+fetch('https://ranchimallflo.duckdns.org/api/v1.0/getTokenInfo?token=rmt'){
+        .then(response => response.json())
+        .then(data => console.log(data));
 }
 ```
 
@@ -98,6 +133,22 @@ Output:
    ]
 }
 ```
+
+Python example code
+```
+response = requests.get('https://ranchimallflo.duckdns.org/api/v1.0/getTokenTransactions?token=rmt')
+if response.status_code == 200:
+    json_response = response.json()
+elif response.status_code == 404:
+    print('Not Found.')
+```
+
+Javascript example code
+```
+fetch('https://ranchimallflo.duckdns.org/api/v1.0/getTokenTransactions?token=rmt'){
+        .then(response => response.json())
+        .then(data => console.log(data));
+}
 
 ### Information about a token's address balances 
 Get information about a token's address balances
