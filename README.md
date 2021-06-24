@@ -778,3 +778,10 @@ Output:
     "result": "ok"
 }
 ```
+### Latest Block Transactions
+Get information about block transactions 
+```
+  /api/v1.0/getBlockTransactions
+```
+Output:
+```
