@@ -211,7 +211,22 @@ Output:
       "result": "ok"
 }
 ```
+Python example code
+```
+response = requests.get('https://ranchimallflo.duckdns.org/api/v1.0/getFloAddressDetails?floAddress=F6WPx2WFdmVQ6AMutZ2FJzpyiwdxqLyd2z')
+if response.status_code == 200:
+    json_response = response.json()
+elif response.status_code == 404:
+    print('Not Found.')
+```
 
+Javascript example code
+```
+fetch('https://ranchimallflo.duckdns.org/api/v1.0/getFloAddressDetails?floAddress=F6WPx2WFdmVQ6AMutZ2FJzpyiwdxqLyd2z'){
+        .then(response => response.json())
+        .then(data => console.log(data));
+}
+```
 ### Information about a FLO address of a particular token 
 Get information about a FLO address of a particular token 
 ```
