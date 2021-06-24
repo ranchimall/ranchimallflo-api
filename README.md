@@ -13,7 +13,7 @@ The above API provides details about the token and smart contract system on the 
 ```
 git clone https://github.com/ranchimall/ranchimallflo-api
 cd ranchimallflo-api
-python3 -m venv py3
+python3 -m venv py3..
 source py3/bin/activate 
 pip install requests quart quart_cors ecdsa config arrow
 ```
