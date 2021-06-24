@@ -785,3 +785,86 @@ Get information about block transactions
 ```
 Output:
 ```
+
+{
+
+    "blockKeyword": "3454503",
+    "result": "ok",
+    "transactions": {
+        "b57cf412c8cb16e473d04bae44214705c64d2c25146be22695bf1ac36e166ee0": {
+            "parsedFloData": {
+                "contractName": "india-elections-2019",
+                "triggerCondition": "narendra modi wins",
+                "type": "smartContractPays"
+            },
+            "transactionDetails": {
+                "blockhash": "5036019f878cdd22cbd1563cc25b999fe103931a7784a6d67c9f6548f44076a3",
+                "blockheight": 3454503,
+                "blocktime": 1558862083,
+                "confirmations": 1342505,
+                "fees": 0.0005,
+                "floData": "india-elections-2019@ winning-choice:'narendra modi wins'",
+                "locktime": 0,
+                "size": 283,
+                "time": 1558862083,
+                "txid": "b57cf412c8cb16e473d04bae44214705c64d2c25146be22695bf1ac36e166ee0",
+                "valueIn": 0.001,
+                "valueOut": 0.0005,
+                "version": 2,
+                "vin": [
+                    {
+                        "addr": "FRwwCqbP7DN4z5guffzzhCSgpD8Q33hUG8",
+                        "confirmations": null,
+                        "doubleSpentTxID": null,
+                        "isConfirmed": null,
+                        "n": 0,
+                        "scriptSig": {
+                            "asm": "304402206c414be1ad91eb32603c696b2fde7836585573371f25be742b1a88fa9215a8fd0220035932fe3286973267c3e9467bad6ca7237bcd0aa8a4e6607b076274ad5e78cd01 03eb349253a45fe086cf9594825d1dbd7bf50b348bc1cccb921485acf06811b982",
+                            "hex": "47304402206c414be1ad91eb32603c696b2fde7836585573371f25be742b1a88fa9215a8fd0220035932fe3286973267c3e9467bad6ca7237bcd0aa8a4e6607b076274ad5e78cd012103eb349253a45fe086cf9594825d1dbd7bf50b348bc1cccb921485acf06811b982"
+                        },
+                        "sequence": 4294967295,
+                        "txid": "6a49fd8fcdf557845788ac4d578568aac7c675c27ac3a57a09807a55ce9b56fa",
+                        "unconfirmedInput": null,
+                        "value": 0.001,
+                        "valueSat": 100000,
+                        "vout": 0
+                    }
+                ],
+                "vout": [
+                    {
+                        "n": 0,
+                        "scriptPubKey": {
+                            "addresses": [
+                                "F7osBpjDDV1mSSnMNrLudEQQ3cwDJ2dPR1"
+                            ],
+                            "asm": "OP_DUP OP_HASH160 15b3eb460d593f74775167d589a3a443eb78b55b OP_EQUALVERIFY OP_CHECKSIG",
+                            "hex": "76a91415b3eb460d593f74775167d589a3a443eb78b55b88ac",
+                            "type": "pubkeyhash"
+                        },
+                        "spentHeight": null,
+                        "spentIndex": null,
+                        "spentTxId": null,
+                        "value": "0.00010000"
+                    },
+                    {
+                        "n": 1,
+                        "scriptPubKey": {
+                            "addresses": [
+                                "FRwwCqbP7DN4z5guffzzhCSgpD8Q33hUG8"
+                            ],
+                            "asm": "OP_DUP OP_HASH160 dcacdd4e7c523b9ee05e980e9fc2ced5fb343669 OP_EQUALVERIFY OP_CHECKSIG",
+                            "hex": "76a914dcacdd4e7c523b9ee05e980e9fc2ced5fb34366988ac",
+                            "type": "pubkeyhash"
+                        },
+                        "spentHeight": null,
+                        "spentIndex": null,
+                        "spentTxId": null,
+                        "value": "0.00040000"
+                    }
+                ]
+            }
+        }
+    }
+
+}
+```
