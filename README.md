@@ -781,7 +781,7 @@ Output:
 ### Latest Block Transactions
 Get information about block transactions 
 ```
-  /api/v1.0/getBlockTransactions
+  /api/v1.0/getBlockTransactions/<blockdetail>
 ```
 Output:
 ```
