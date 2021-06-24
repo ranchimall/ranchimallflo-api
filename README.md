@@ -149,7 +149,7 @@ fetch('https://ranchimallflo.duckdns.org/api/v1.0/getTokenTransactions?token=rmt
         .then(response => response.json())
         .then(data => console.log(data));
 }
-
+```
 ### Information about a token's address balances 
 Get information about a token's address balances
 ```
