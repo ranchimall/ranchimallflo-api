@@ -70,7 +70,7 @@ fetch('https://ranchimallflo.duckdns.org/api/v1.0/getTokenList'){
 ### Information about a token
 Get information about a token on the FLO blockchain 
 ```
-  /api/v1.0/getTokenInfo?token=rmt
+  /api/v1.0/getTokenInfo?<tokenName>
 ```
 Output:
 ```
@@ -87,7 +87,7 @@ Output:
 
 Python example code
 ```
-response = requests.get('https://ranchimallflo.duckdns.org/api/v1.0/getTokenInfo?token=rmt')
+response = requests.get('https://ranchimallflo.duckdns.org/api/v1.0/getTokenInfo?<tokenName>')
 if response.status_code == 200:
     json_response = response.json()
 elif response.status_code == 404:
@@ -96,7 +96,7 @@ elif response.status_code == 404:
 
 Javascript example code
 ```
-fetch('https://ranchimallflo.duckdns.org/api/v1.0/getTokenInfo?token=rmt'){
+fetch('https://ranchimallflo.duckdns.org/api/v1.0/getTokenInfo?<tokenName>'){
         .then(response => response.json())
         .then(data => console.log(data));
 }
@@ -105,7 +105,7 @@ fetch('https://ranchimallflo.duckdns.org/api/v1.0/getTokenInfo?token=rmt'){
 ### Information about a token's transactions
 Get information about a token's related transactions on the blockchain 
 ```
-  /api/v1.0/getTokenTransactions?token=rmt
+  /api/v1.0/getTokenTransactions?<tokenName>
 ```
 Optional URL parameters :
 senderFloAddress
@@ -136,7 +136,7 @@ Output:
 
 Python example code
 ```
-response = requests.get('https://ranchimallflo.duckdns.org/api/v1.0/getTokenTransactions?token=rmt')
+response = requests.get('https://ranchimallflo.duckdns.org/api/v1.0/getTokenTransactions?<tokenName>')
 if response.status_code == 200:
     json_response = response.json()
 elif response.status_code == 404:
@@ -145,7 +145,7 @@ elif response.status_code == 404:
 
 Javascript example code
 ```
-fetch('https://ranchimallflo.duckdns.org/api/v1.0/getTokenTransactions?token=rmt'){
+fetch('https://ranchimallflo.duckdns.org/api/v1.0/getTokenTransactions?<tokenName>'){
         .then(response => response.json())
         .then(data => console.log(data));
 }
@@ -153,7 +153,7 @@ fetch('https://ranchimallflo.duckdns.org/api/v1.0/getTokenTransactions?token=rmt
 ### Information about a token's address balances 
 Get information about a token's address balances
 ```
-  /api/v1.0/getTokenBalances?token=rmt
+  /api/v1.0/getTokenBalances?<tokenName>
 ```
 
 Output:
@@ -178,7 +178,7 @@ Output:
 ```
 Python example code
 ```
-response = requests.get('https://ranchimallflo.duckdns.org/api/v1.0/getTokenBalances?token=rmt')
+response = requests.get('https://ranchimallflo.duckdns.org/api/v1.0/getTokenBalances?<tokenName>')
 if response.status_code == 200:
     json_response = response.json()
 elif response.status_code == 404:
@@ -187,7 +187,7 @@ elif response.status_code == 404:
 
 Javascript example code
 ```
-fetch('https://ranchimallflo.duckdns.org/api/v1.0/getTokenBalances?token=rmt'){
+fetch('https://ranchimallflo.duckdns.org/api/v1.0/getTokenBalances?<tokenName>'){
         .then(response => response.json())
         .then(data => console.log(data));
 }
