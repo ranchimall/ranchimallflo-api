@@ -15,6 +15,7 @@ from typing import Optional
 from pybtc import verify_signature
 from config import *
 import parsing
+import subprocess
 
 from apscheduler.schedulers.background import BackgroundScheduler
 import atexit
@@ -78,6 +79,7 @@ def blockdetailhelper(blockdetail):
     blockJson = c.fetchall()
     return blockJson
 
+
 def transactiondetailhelper(transactionHash):
     # open the latest block database
     conn = sqlite3.connect(os.path.join(dbfolder, 'latestCache.db'))
@@ -90,6 +92,11 @@ def transactiondetailhelper(transactionHash):
     return transactionJsonData
 
 # FLO TOKEN APIs
+@app.route('/api/v1.0/broadcastTx/<raw_transaction_hash>')
+async def broadcastTx(raw_transaction_hash):
+    p1 = subprocess.run(['flo-cli',f"-datadir={FLO_DATA_DIR}",'sendrawtransaction',raw_transaction_hash], capture_output=True)
+    return jsonify(args=p1.args,returncode=p1.returncode,stdout=p1.stdout.decode(),stderr=p1.stderr.decode())
+
 
 @app.route('/api/v1.0/getTokenList', methods=['GET'])
 async def getTokenList():
@@ -99,7 +106,7 @@ async def getTokenList():
             filelist.append(item[:-3])
 
     return jsonify(tokens=filelist, result='ok')
-
+    
 
 @app.route('/api/v1.0/getTokenInfo', methods=['GET'])
 async def getTokenInfo():
@@ -1040,11 +1047,6 @@ async def systemData():
     conn.close()
 
     return jsonify(systemAddressCount=tokenAddressCount, systemBlockCount=validatedBlockCount, systemTransactionCount=validatedTransactionCount, systemSmartContractCount=contractCount, systemTokenCount=tokenCount, lastscannedblock=lastscannedblock, result='ok')
-
-
-@app.route('/test')
-async def test():
-    return render_template('test.html')
 
 
 class ServerSentEvent:
