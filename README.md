@@ -13,7 +13,7 @@ The above API provides details about the token and smart contract system on the 
 ```
 git clone https://github.com/ranchimall/ranchimallflo-api
 cd ranchimallflo-api
-python3 -m venv py3
+python3 -m venv py3..
 source py3/bin/activate 
 pip install requests quart quart_cors ecdsa config arrow
 ```
@@ -49,10 +49,28 @@ Output:
 }
 ```
 
+Python example code
+```
+response = requests.get('https://ranchimallflo.duckdns.org/api/v1.0/getTokenList')
+if response.status_code == 200:
+    json_response = response.json()
+elif response.status_code == 404:
+    print('Not Found.')
+```
+
+Javascript example code
+```
+fetch('https://ranchimallflo.duckdns.org/api/v1.0/getTokenList'){
+        .then(response => response.json())
+        .then(data => console.log(data));
+}
+```
+
+
 ### Information about a token
 Get information about a token on the FLO blockchain 
 ```
-  /api/v1.0/getTokenInfo?token=rmt
+  /api/v1.0/getTokenInfo?<tokenName>
 ```
 Output:
 ```
@@ -67,10 +85,27 @@ Output:
 }
 ```
 
+Python example code
+```
+response = requests.get('https://ranchimallflo.duckdns.org/api/v1.0/getTokenInfo?<tokenName>')
+if response.status_code == 200:
+    json_response = response.json()
+elif response.status_code == 404:
+    print('Not Found.')
+```
+
+Javascript example code
+```
+fetch('https://ranchimallflo.duckdns.org/api/v1.0/getTokenInfo?<tokenName>'){
+        .then(response => response.json())
+        .then(data => console.log(data));
+}
+```
+
 ### Information about a token's transactions
 Get information about a token's related transactions on the blockchain 
 ```
-  /api/v1.0/getTokenTransactions?token=rmt
+  /api/v1.0/getTokenTransactions?<tokenName>
 ```
 Optional URL parameters :
 senderFloAddress
@@ -99,10 +134,26 @@ Output:
 }
 ```
 
+Python example code
+```
+response = requests.get('https://ranchimallflo.duckdns.org/api/v1.0/getTokenTransactions?<tokenName>')
+if response.status_code == 200:
+    json_response = response.json()
+elif response.status_code == 404:
+    print('Not Found.')
+```
+
+Javascript example code
+```
+fetch('https://ranchimallflo.duckdns.org/api/v1.0/getTokenTransactions?<tokenName>'){
+        .then(response => response.json())
+        .then(data => console.log(data));
+}
+```
 ### Information about a token's address balances 
 Get information about a token's address balances
 ```
-  /api/v1.0/getTokenBalances?token=rmt
+  /api/v1.0/getTokenBalances?<tokenName>
 ```
 
 Output:
@@ -125,7 +176,22 @@ Output:
   "result": "ok"
 }
 ```
+Python example code
+```
+response = requests.get('https://ranchimallflo.duckdns.org/api/v1.0/getTokenBalances?<tokenName>')
+if response.status_code == 200:
+    json_response = response.json()
+elif response.status_code == 404:
+    print('Not Found.')
+```
 
+Javascript example code
+```
+fetch('https://ranchimallflo.duckdns.org/api/v1.0/getTokenBalances?<tokenName>'){
+        .then(response => response.json())
+        .then(data => console.log(data));
+}
+```
 ### Information about a FLO address 
 Get information about a FLO address
 ```
@@ -145,7 +211,22 @@ Output:
       "result": "ok"
 }
 ```
+Python example code
+```
+response = requests.get('https://ranchimallflo.duckdns.org/api/v1.0/getFloAddressDetails?floAddress=F6WPx2WFdmVQ6AMutZ2FJzpyiwdxqLyd2z')
+if response.status_code == 200:
+    json_response = response.json()
+elif response.status_code == 404:
+    print('Not Found.')
+```
 
+Javascript example code
+```
+fetch('https://ranchimallflo.duckdns.org/api/v1.0/getFloAddressDetails?floAddress=F6WPx2WFdmVQ6AMutZ2FJzpyiwdxqLyd2z'){
+        .then(response => response.json())
+        .then(data => console.log(data));
+}
+```
 ### Information about a FLO address of a particular token 
 Get information about a FLO address of a particular token 
 ```
@@ -159,6 +240,22 @@ Output:
       "floAddress": "F6WPx2WFdmVQ6AMutZ2FJzpyiwdxqLyd2z",
       "result": "ok",
       "token": "rmt"
+}
+```
+Python example code
+```
+response = requests.get('https://ranchimallflo.duckdns.org/api/v1.0/getFloAddressBalance?token=rmt&floAddress=F6WPx2WFdmVQ6AMutZ2FJzpyiwdxqLyd2z')
+if response.status_code == 200:
+    json_response = response.json()
+elif response.status_code == 404:
+    print('Not Found.')
+```
+
+Javascript example code
+```
+fetch('https://ranchimallflo.duckdns.org/api/v1.0/getFloAddressBalance?token=rmt&floAddress=F6WPx2WFdmVQ6AMutZ2FJzpyiwdxqLyd2z'){
+        .then(response => response.json())
+        .then(data => console.log(data));
 }
 ```
 
@@ -196,7 +293,22 @@ Output:
 "result": "ok"
 }
 ```
+Python example code
+```
+response = requests.get('https://ranchimallflo.duckdns.org/api/v1.0/getFloAddressTransactions?floAddress=F6WPx2WFdmVQ6AMutZ2FJzpyiwdxqLyd2z')
+if response.status_code == 200:
+    json_response = response.json()
+elif response.status_code == 404:
+    print('Not Found.')
+```
 
+Javascript example code
+```
+fetch('https://ranchimallflo.duckdns.org/api/v1.0/getFloAddressTransactions?floAddress=F6WPx2WFdmVQ6AMutZ2FJzpyiwdxqLyd2z'){
+        .then(response => response.json())
+        .then(data => console.log(data));
+}
+```
 ### Get list of all active smart contracts  
 Get list of all active smart contracts 
 ```
@@ -222,7 +334,22 @@ Output:
     ]
 }
 ```
+Python example code
+```
+response = requests.get('https://ranchimallflo.duckdns.org/api/v1.0/getSmartContractList')
+if response.status_code == 200:
+    json_response = response.json()
+elif response.status_code == 404:
+    print('Not Found.')
+```
 
+Javascript example code
+```
+fetch('https://ranchimallflo.duckdns.org/api/v1.0/getSmartContractList'){
+        .then(response => response.json())
+        .then(data => console.log(data));
+}
+```
 ### Smart Contract's information  
 Get information about a specified Smart Contract 
 ```
@@ -252,7 +379,22 @@ Output:
     "result": "ok"
 }
 ```
+Python example code
+```
+response = requests.get('https://ranchimallflo.duckdns.org/api/v1.0/getSmartContractInfo?contractName=india-elections-2019&contractAddress=F7osBpjDDV1mSSnMNrLudEQQ3cwDJ2dPR1')
+if response.status_code == 200:
+    json_response = response.json()
+elif response.status_code == 404:
+    print('Not Found.')
+```
 
+Javascript example code
+```
+fetch('https://ranchimallflo.duckdns.org/api/v1.0/getSmartContractInfo?contractName=india-elections-2019&contractAddress=F7osBpjDDV1mSSnMNrLudEQQ3cwDJ2dPR1'){
+        .then(response => response.json())
+        .then(data => console.log(data));
+}
+```
 ### Smart Contract's participants  
 Get information about a specified Smart Contract's participants 
 ```
@@ -287,7 +429,22 @@ Output:
     "result": "ok"
 }
 ```
+Python example code
+```
+response = requests.get('https://ranchimallflo.duckdns.org/api/v1.0/getSmartContractParticipants?contractName=india-elections-2019&contractAddress=F7osBpjDDV1mSSnMNrLudEQQ3cwDJ2dPR1')
+if response.status_code == 200:
+    json_response = response.json()
+elif response.status_code == 404:
+    print('Not Found.')
+```
 
+Javascript example code
+```
+fetch('https://ranchimallflo.duckdns.org/api/v1.0/getSmartContractParticipants?contractName=india-elections-2019&contractAddress=F7osBpjDDV1mSSnMNrLudEQQ3cwDJ2dPR1'){
+        .then(response => response.json())
+        .then(data => console.log(data));
+}
+```
 ### Smart Contract's participant details   
 Get information about a specified Smart Contract's participants 
 ```
@@ -322,7 +479,22 @@ Output:
     "result": "ok"
 }
 ```
+Python example code
+```
+response = requests.get('https://ranchimallflo.duckdns.org/api/v1.0/getSmartContractParticipantDetails?floAddress=')
+if response.status_code == 200:
+    json_response = response.json()
+elif response.status_code == 404:
+    print('Not Found.')
+```
 
+Javascript example code
+```
+fetch('https://ranchimallflo.duckdns.org/api/v1.0/getSmartContractParticipantDetails?floAddress='){
+        .then(response => response.json())
+        .then(data => console.log(data));
+}
+```
 ### Block details     
 Get information about a block by specifying its blockno 
 ```
@@ -352,7 +524,22 @@ Output:
     "version": 1
 }
 ```
+Python example code
+```
+response = requests.get('https://ranchimallflo.duckdns.org/api/v1.0/getBlockDetails/<blockno>')
+if response.status_code == 200:
+    json_response = response.json()
+elif response.status_code == 404:
+    print('Not Found.')
+```
 
+Javascript example code
+```
+fetch('https://ranchimallflo.duckdns.org/api/v1.0/getBlockDetails/<blockno>'){
+        .then(response => response.json())
+        .then(data => console.log(data));
+}
+```
 ### Transaction details     
 Get information about a transaction 
 ```
@@ -456,7 +643,22 @@ Output:
     }
 }
 ```
+Python example code
+```
+response = requests.get('https://ranchimallflo.duckdns.org/api/v1.0/getTransactionDetails/<transactionHash>')
+if response.status_code == 200:
+    json_response = response.json()
+elif response.status_code == 404:
+    print('Not Found.')
+```
 
+Javascript example code
+```
+fetch('https://ranchimallflo.duckdns.org/api/v1.0/getTransactionDetails/<transactionHash>'){
+        .then(response => response.json())
+        .then(data => console.log(data));
+}
+```
 ### Latest Blocks details 
 Get information about latest blocks 
 ```
@@ -574,7 +776,22 @@ Output:
     "result": "ok"
 }
 ```
+Python example code
+```
+response = requests.get('https://ranchimallflo.duckdns.org/api/v1.0/getLatestBlockDetails')
+if response.status_code == 200:
+    json_response = response.json()
+elif response.status_code == 404:
+    print('Not Found.')
+```
 
+Javascript example code
+```
+fetch('https://ranchimallflo.duckdns.org/api/v1.0/getLatestBlockDetails'){
+        .then(response => response.json())
+        .then(data => console.log(data));
+}
+```
 ### Latest Transactions details 
 Get information about latest transactions 
 ```
@@ -725,5 +942,127 @@ Output:
         }
     ],
     "result": "ok"
+}
+```
+Python example code
+```
+response = requests.get('https://ranchimallflo.duckdns.org/api/v1.0/getLatestTransactionDetails')
+if response.status_code == 200:
+    json_response = response.json()
+elif response.status_code == 404:
+    print('Not Found.')
+```
+
+Javascript example code
+```
+fetch('https://ranchimallflo.duckdns.org/api/v1.0/getLatestTransactionDetails'){
+        .then(response => response.json())
+        .then(data => console.log(data));
+}
+```
+### Latest Block Transactions
+Get information about block transactions 
+```
+  /api/v1.0/getBlockTransactions/<blockdetail>
+```
+Output:
+```
+
+{
+
+    "blockKeyword": "3454503",
+    "result": "ok",
+    "transactions": {
+        "b57cf412c8cb16e473d04bae44214705c64d2c25146be22695bf1ac36e166ee0": {
+            "parsedFloData": {
+                "contractName": "india-elections-2019",
+                "triggerCondition": "narendra modi wins",
+                "type": "smartContractPays"
+            },
+            "transactionDetails": {
+                "blockhash": "5036019f878cdd22cbd1563cc25b999fe103931a7784a6d67c9f6548f44076a3",
+                "blockheight": 3454503,
+                "blocktime": 1558862083,
+                "confirmations": 1342505,
+                "fees": 0.0005,
+                "floData": "india-elections-2019@ winning-choice:'narendra modi wins'",
+                "locktime": 0,
+                "size": 283,
+                "time": 1558862083,
+                "txid": "b57cf412c8cb16e473d04bae44214705c64d2c25146be22695bf1ac36e166ee0",
+                "valueIn": 0.001,
+                "valueOut": 0.0005,
+                "version": 2,
+                "vin": [
+                    {
+                        "addr": "FRwwCqbP7DN4z5guffzzhCSgpD8Q33hUG8",
+                        "confirmations": null,
+                        "doubleSpentTxID": null,
+                        "isConfirmed": null,
+                        "n": 0,
+                        "scriptSig": {
+                            "asm": "304402206c414be1ad91eb32603c696b2fde7836585573371f25be742b1a88fa9215a8fd0220035932fe3286973267c3e9467bad6ca7237bcd0aa8a4e6607b076274ad5e78cd01 03eb349253a45fe086cf9594825d1dbd7bf50b348bc1cccb921485acf06811b982",
+                            "hex": "47304402206c414be1ad91eb32603c696b2fde7836585573371f25be742b1a88fa9215a8fd0220035932fe3286973267c3e9467bad6ca7237bcd0aa8a4e6607b076274ad5e78cd012103eb349253a45fe086cf9594825d1dbd7bf50b348bc1cccb921485acf06811b982"
+                        },
+                        "sequence": 4294967295,
+                        "txid": "6a49fd8fcdf557845788ac4d578568aac7c675c27ac3a57a09807a55ce9b56fa",
+                        "unconfirmedInput": null,
+                        "value": 0.001,
+                        "valueSat": 100000,
+                        "vout": 0
+                    }
+                ],
+                "vout": [
+                    {
+                        "n": 0,
+                        "scriptPubKey": {
+                            "addresses": [
+                                "F7osBpjDDV1mSSnMNrLudEQQ3cwDJ2dPR1"
+                            ],
+                            "asm": "OP_DUP OP_HASH160 15b3eb460d593f74775167d589a3a443eb78b55b OP_EQUALVERIFY OP_CHECKSIG",
+                            "hex": "76a91415b3eb460d593f74775167d589a3a443eb78b55b88ac",
+                            "type": "pubkeyhash"
+                        },
+                        "spentHeight": null,
+                        "spentIndex": null,
+                        "spentTxId": null,
+                        "value": "0.00010000"
+                    },
+                    {
+                        "n": 1,
+                        "scriptPubKey": {
+                            "addresses": [
+                                "FRwwCqbP7DN4z5guffzzhCSgpD8Q33hUG8"
+                            ],
+                            "asm": "OP_DUP OP_HASH160 dcacdd4e7c523b9ee05e980e9fc2ced5fb343669 OP_EQUALVERIFY OP_CHECKSIG",
+                            "hex": "76a914dcacdd4e7c523b9ee05e980e9fc2ced5fb34366988ac",
+                            "type": "pubkeyhash"
+                        },
+                        "spentHeight": null,
+                        "spentIndex": null,
+                        "spentTxId": null,
+                        "value": "0.00040000"
+                    }
+                ]
+            }
+        }
+    }
+
+}
+```
+Python example code
+```
+response = requests.get('https://ranchimallflo.duckdns.org/api/v1.0/getBlockTransactions/<blockdetail>')
+if response.status_code == 200:
+    json_response = response.json()
+elif response.status_code == 404:
+    print('Not Found.')
+```
+
+Javascript example code
+```
+fetch('https://ranchimallflo.duckdns.org/api/v1.0/getBlockTransactions/<blockdetail>'){
+        .then(response => response.json())
+        .then(data => console.log(data));
 }
 ```
