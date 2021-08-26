@@ -1135,6 +1135,8 @@ async def getPriceData():
 ''' Stuff required for getPrices endpoint '''
 
 
+def updatePrices():
+    print('Endpoint removed for now')
 
 # if system.db isn't present, initialize it
 if not os.path.isfile(f"system.db"):
