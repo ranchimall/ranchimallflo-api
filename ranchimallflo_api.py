@@ -1143,6 +1143,8 @@ def updatePrices():
         f"https://api.exchangeratesapi.io/latest?base=USD&symbols=INR")
     try:
         price = response.json()
+        if price['success'] == False:
+            raise ValueError('API response error')
         prices['USDINR'] = price['rates']['INR']
     except ValueError:
         response = requests.get(
