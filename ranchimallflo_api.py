@@ -1134,9 +1134,36 @@ async def getPriceData():
 
 ''' Stuff required for getPrices endpoint '''
 
-
 def updatePrices():
-    print('Endpoint removed for now')
+    prices = {}
+    # USD -> INR
+    response = requests.get(f"https://api.exchangerate-api.com/v4/latest/usd")
+    price = response.json()
+    prices['USDINR'] = price['rates']['INR']
+
+    # Blockchain stuff : BTC,FLO -> USD,INR
+    # BTC->USD | BTC->INR
+    response = requests.get(f"https://api.coingecko.com/api/v3/simple/price?ids=bitcoin,flo&vs_currencies=usd,inr")
+    price = response.json()
+    prices['BTCUSD'] = price['bitcoin']['usd']
+    prices['BTCINR'] = price['bitcoin']['inr']
+
+    # FLO->USD | FLO->INR
+    response = requests.get(f"https://api.coinlore.net/api/ticker/?id=67")
+    price = response.json()
+    prices["FLOUSD"] = price[0]['price_usd']
+    prices["FLOINR"] = float(prices["FLOUSD"]) * float(prices['USDINR'])
+
+    # 3. update latest price data
+    print('Prices updated at time: %s' % datetime.now())
+    print(prices)
+
+    conn = sqlite3.connect('system.db')
+    c = conn.cursor()
+    for pair in list(prices.items()):
+        pair = list(pair)
+        c.execute(f"UPDATE ratepairs SET price={pair[1]} WHERE ratepair='{pair[0]}'")
+    conn.commit()
 
 # if system.db isn't present, initialize it
 if not os.path.isfile(f"system.db"):
