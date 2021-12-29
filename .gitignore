@@ -1,6 +1,5 @@
 .vscode/
 __pycache__/
-wsgi.py
 *.swp
 config.py
 .idea/

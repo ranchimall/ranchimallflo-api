@@ -1076,7 +1076,7 @@ class ServerSentEvent:
         return message.encode('utf-8')
 
 
-@app.route('/', methods=['GET'])
+"""@app.route('/', methods=['GET'])
 async def index():
     return await render_template('index.html')
 
@@ -1086,7 +1086,7 @@ async def broadcast():
     data = await request.get_json()
     for queue in app.clients:
         await queue.put(data['message'])
-    return jsonify(True)
+    return jsonify(True) """
 
 
 @app.route('/sse')
