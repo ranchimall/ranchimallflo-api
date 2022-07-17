@@ -6,19 +6,22 @@ import requests
 import sys
 import time
 from datetime import datetime
-from quart import jsonify, make_response, Quart, render_template, request, flash, redirect, url_for
+from quart import jsonify, make_response, Quart, render_template, request, flash, redirect, url_for, send_file
 from quart_cors import cors
 
 import asyncio
 from typing import Optional
 
-from pybtc import verify_signature
 from config import *
 import parsing
 import subprocess
 
 from apscheduler.schedulers.background import BackgroundScheduler
 import atexit
+import pathlib
+import io 
+import zipfile
+import tarfile
 
 
 app = Quart(__name__)
@@ -1049,6 +1052,19 @@ async def systemData():
     return jsonify(systemAddressCount=tokenAddressCount, systemBlockCount=validatedBlockCount, systemTransactionCount=validatedTransactionCount, systemSmartContractCount=contractCount, systemTokenCount=tokenCount, lastscannedblock=lastscannedblock, result='ok')
 
 
+'''@app.route('/api/v1.0/floscout-bootstrap')
+def request_zip():
+    directory = pathlib.Path("")
+    data = io.BytesIO()
+    with zipfile.ZipFile(data, mode="w") as archive:
+        for file_path in directory.rglob("*"):
+            archive.write(file_path, arcname=file_path.name)
+    data.seek(0)
+    return send_file( data,
+                            mimetype='application/zip',
+                            as_attachment=True,
+                            attachment_filename='data.zip')'''
+
 class ServerSentEvent:
 
     def __init__(
@@ -1117,7 +1133,6 @@ async def sse():
 
 @app.route('/api/v1.0/getPrices', methods=['GET'])
 async def getPriceData():
-
     # read system.db for price data
     conn = sqlite3.connect('system.db')
     c = conn.cursor()
@@ -1192,4 +1207,4 @@ scheduler.start()
 atexit.register(lambda: scheduler.shutdown())
 
 if __name__ == "__main__":
-    app.run(debug=True, host='0.0.0.0', port=5009)
+    app.run(debug=False, host='0.0.0.0', port=5009)
