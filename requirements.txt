@@ -23,7 +23,6 @@ python-dateutil==2.8.0
 Quart==0.10.0
 Quart-CORS==0.2.0
 requests==2.22.0
-secp256k1==0.13.2
 six==1.12.0
 sortedcontainers==2.1.0
 toml==0.10.0
