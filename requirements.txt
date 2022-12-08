@@ -2,7 +2,7 @@ aiofiles==0.4.0
 APScheduler==3.9.1
 arrow==0.15.2
 blinker==1.4
-certifi==2019.9.11
+certifi==2022.12.7
 cffi
 chardet==3.0.4
 Click==7.0
