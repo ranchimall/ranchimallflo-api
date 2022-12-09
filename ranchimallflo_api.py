@@ -88,11 +88,20 @@ def transactiondetailhelper(transactionHash):
     conn = sqlite3.connect(os.path.join(dbfolder, 'latestCache.db'))
     c = conn.cursor()
 
-    c.execute(
-        f"select jsonData,parsedFloData from latestTransactions where transactionHash='{transactionHash}'")
+    c.execute(f"select jsonData, parsedFloData, transactionType, db_reference from latestTransactions where transactionHash='{transactionHash}'")
     transactionJsonData = c.fetchall()
 
     return transactionJsonData
+
+
+def smartContractInfo_output(contractName, contractAddress, contractType, subtype):
+    if contractType == 'continuos-event' and contractType == 'tokenswap':
+        pass
+    elif contractType == 'one-time-event' and contractType == 'userchoice':
+        pass
+    elif contractType == 'one-time-event' and contractType == 'timetrigger':
+        pass
+        
 
 # FLO TOKEN APIs
 @app.route('/api/v1.0/broadcastTx/<raw_transaction_hash>')
@@ -519,16 +528,14 @@ async def getContractInfo():
     if contractAddress is None:
         return jsonify(result='error', description='Smart Contract\'s address hasn\'t been passed')
 
-    contractDbName = '{}-{}.db'.format(contractName.strip(),
-                                       contractAddress.strip())
+    contractDbName = '{}-{}.db'.format(contractName.strip(),contractAddress.strip())
     filelocation = os.path.join(dbfolder, 'smartContracts', contractDbName)
 
     if os.path.isfile(filelocation):
         # Make db connection and fetch data
         conn = sqlite3.connect(filelocation)
         c = conn.cursor()
-        c.execute(
-            'SELECT attribute,value FROM contractstructure')
+        c.execute('SELECT attribute,value FROM contractstructure')
         result = c.fetchall()
 
         contractStructure = {}
@@ -543,7 +550,7 @@ async def getContractInfo():
         if len(conditionDict) > 0:
             contractStructure['exitconditions'] = conditionDict
         del counter, conditionDict
-
+        
         returnval = contractStructure
         returnval['userChoice'] = contractStructure['exitconditions']
         returnval.pop('exitconditions')
@@ -559,8 +566,7 @@ async def getContractInfo():
 
         conn = sqlite3.connect(os.path.join(dbfolder, 'system.db'))
         c = conn.cursor()
-        c.execute('select status, incorporationDate, expiryDate, closeDate from activecontracts where contractName=="{}" and contractAddress=="{}"'.format(
-            contractName.strip(), contractAddress.strip()))
+        c.execute('select status, incorporationDate, expiryDate, closeDate from activecontracts where contractName=="{}" and contractAddress=="{}"'.format(contractName.strip(), contractAddress.strip()))
         results = c.fetchall()
 
         if len(results) == 1:
@@ -601,20 +607,19 @@ async def getContractInfo():
                                 'select participantAddress, winningAmount from contractparticipants where winningAmount is not null')
                             winnerparticipants = c.fetchall()
 
-                            returnval['numberOfWinners'] = len(
-                                winnerparticipants)
+                            returnval['numberOfWinners'] = len(winnerparticipants)
 
                 else:
                     return jsonify(result='error', description='There is more than 1 trigger in the database for the smart contract. Please check your code, this shouldnt happen')
-
+        
         return jsonify(result='ok', contractName=contractName, contractAddress=contractAddress, contractInfo=returnval)
 
     else:
         return jsonify(result='error', details='Smart Contract with the given name doesn\'t exist')
 
 
-@app.route('/api/v1.0/getSmartContractParticipants', methods=['GET'])
-async def getcontractparticipants():
+@app.route('/api/v2.0/getSmartContractInfo', methods=['GET'])
+async def getContractInfo2():
     contractName = request.args.get('contractName')
     contractAddress = request.args.get('contractAddress')
 
@@ -624,16 +629,14 @@ async def getcontractparticipants():
     if contractAddress is None:
         return jsonify(result='error', description='Smart Contract\'s address hasn\'t been passed')
 
-    contractDbName = '{}-{}.db'.format(contractName.strip(),
-                                       contractAddress.strip())
+    contractDbName = '{}-{}.db'.format(contractName.strip(),contractAddress.strip())
     filelocation = os.path.join(dbfolder, 'smartContracts', contractDbName)
 
     if os.path.isfile(filelocation):
         # Make db connection and fetch data
         conn = sqlite3.connect(filelocation)
         c = conn.cursor()
-        c.execute(
-            'SELECT attribute,value FROM contractstructure')
+        c.execute('SELECT attribute,value FROM contractstructure')
         result = c.fetchall()
 
         contractStructure = {}
@@ -649,20 +652,93 @@ async def getcontractparticipants():
             contractStructure['exitconditions'] = conditionDict
         del counter, conditionDict
 
+        returnval = contractStructure
+        pdb.set_trace()
+        # Categorize into what type of contract it is right now 
+        if contractStructure['contractType'] == 'continuos-event' and contractStructure['subtype'] == 'tokenswap':
+            c.execute('select count(participantAddress), sum(tokenAmount), sum(winningAmount) from contractparticipants')
+            participation_details = c.fetchall()
+            returnval['numberOfParticipants'] = participation_details[0][0]
+            returnval['totalParticipationAmount'] = participation_details[0][1]
+            returnval['totalHonorAmount'] = participation_details[0][2]
+    
+            c.execute('SELECT COUNT(DISTINCT transactionHash) FROM contractdeposits')
+            returnval['numberOfDeposits'] = c.fetchall()[0][0]
+            c.execute('SELECT COUNT(DISTINCT transactionHash) FROM contractdeposits')
+            returnval['numberOfDeposits'] = c.fetchall()[0][0]
+            conn.close()
+        
+        elif contractStructure['contractType'] == 'one-time-event' and 'exitconditions' in contractStructure.keys():
+            returnval['userChoice'] = contractStructure['exitconditions']
+            returnval.pop('exitconditions')
+
+            conn = sqlite3.connect(os.path.join(dbfolder, 'system.db'))
+            c = conn.cursor()
+            c.execute('select status, incorporationDate, expiryDate, closeDate from activecontracts where contractName=="{}" and contractAddress=="{}"'.format(contractName.strip(), contractAddress.strip()))
+            results = c.fetchall()
+
+            if len(results) == 1:
+                for result in results:
+                    returnval['status'] = result[0]
+                    returnval['incorporationDate'] = result[1]
+                    if result[2]:
+                        returnval['expiryDate'] = result[2]
+                    if result[3]:
+                        returnval['closeDate'] = result[3]
+
+        elif contractStructure['contractType'] == 'one-time-event' and 'payeeAddress' in contractStructure.keys():
+            pass
+
+        return jsonify(result='ok', contractName=contractName, contractAddress=contractAddress, contractInfo=returnval)
+    else:
+        return jsonify(result='error', details='Smart Contract with the given name doesn\'t exist')
+
+
+@app.route('/api/v1.0/getSmartContractParticipants', methods=['GET'])
+async def getcontractparticipants():
+    contractName = request.args.get('contractName')
+    contractAddress = request.args.get('contractAddress')
+
+    if contractName is None:
+        return jsonify(result='error', description='Smart Contract\'s name hasn\'t been passed')
+
+    if contractAddress is None:
+        return jsonify(result='error', description='Smart Contract\'s address hasn\'t been passed')
+
+    contractDbName = '{}-{}.db'.format(contractName.strip(), contractAddress.strip())
+    filelocation = os.path.join(dbfolder, 'smartContracts', contractDbName)
+
+    if os.path.isfile(filelocation):
+        # Make db connection and fetch data
+        conn = sqlite3.connect(filelocation)
+        c = conn.cursor()
+        c.execute('SELECT attribute,value FROM contractstructure')
+        result = c.fetchall()
+
+        contractStructure = {}
+        conditionDict = {}
+        counter = 0
+        for item in result:
+            if list(item)[0] == 'exitconditions':
+                conditionDict[counter] = list(item)[1]
+                counter = counter + 1
+            else:
+                contractStructure[list(item)[0]] = list(item)[1]
+        if len(conditionDict) > 0:
+            contractStructure['exitconditions'] = conditionDict
+        del counter, conditionDict
+        
         if 'exitconditions' in contractStructure:
             # contract is of the type external trigger
             # check if the contract has been closed
-            c.execute(
-                'select * from contractTransactionHistory where transactionType="trigger"')
+            c.execute('select * from contractTransactionHistory where transactionType="trigger"')
             trigger = c.fetchall()
 
             if len(trigger) == 1:
-                c.execute(
-                    'select value from contractstructure where attribute="tokenIdentification"')
+                c.execute('select value from contractstructure where attribute="tokenIdentification"')
                 token = c.fetchall()
                 token = token[0][0]
-                c.execute(
-                    'SELECT id,participantAddress, tokenAmount, userChoice, transactionHash, winningAmount FROM contractparticipants')
+                c.execute('SELECT id,participantAddress, tokenAmount, userChoice, transactionHash, winningAmount FROM contractparticipants')
                 result = c.fetchall()
                 conn.close()
                 returnval = {}
@@ -670,20 +746,14 @@ async def getcontractparticipants():
                     returnval[row[1]] = {'participantFloAddress': row[1], 'tokenAmount': row[2], 'userChoice': row[3],
                                          'transactionHash': row[4], 'winningAmount': row[5], 'tokenIdentification': token}
 
-                return jsonify(result='ok', contractName=contractName, contractAddress=contractAddress,
-                               participantInfo=returnval)
             elif len(trigger) == 0:
-                c.execute(
-                    'SELECT id,participantAddress, tokenAmount, userChoice, transactionHash FROM contractparticipants')
+                c.execute('SELECT id,participantAddress, tokenAmount, userChoice, transactionHash FROM contractparticipants')
                 result = c.fetchall()
                 conn.close()
                 returnval = {}
                 for row in result:
-                    returnval[row[1]] = {'participantFloAddress': row[1], 'tokenAmount': row[2], 'userChoice': row[3],
-                                         'transactionHash': row[4]}
+                    returnval[row[1]] = {'participantFloAddress': row[1], 'tokenAmount': row[2], 'userChoice': row[3], 'transactionHash': row[4]}
 
-                return jsonify(result='ok', contractName=contractName, contractAddress=contractAddress,
-                               participantInfo=returnval)
             else:
                 return jsonify(result='error', description='More than 1 trigger present. This is unusual, please check your code')
 
@@ -698,8 +768,24 @@ async def getcontractparticipants():
                 returnval[row[1]] = {'participantFloAddress': row[1], 'tokenAmount': row[2], 'userChoice': row[3],
                                      'transactionHash': row[4]}
 
-            return jsonify(result='ok', contractName=contractName, contractAddress=contractAddress,
-                           participantInfo=returnval)
+        elif contractStructure['contractType'] == 'continuos-event' and contractStructure['subtype'] == 'tokenswap':
+            pdb.set_trace()
+            c.execute('SELECT * FROM contractparticipants')
+            contract_participants = c.fetchall()
+            returnval = {}
+            for row in contract_participants:
+                returnval[row[1]] = {
+                                        'participantFloAddress': row[1], 
+                                        'participationAmount': row[2], 
+                                        'swapPrice': float(row[3]),
+                                        'transactionHash': row[4],
+                                        'blockNumber': row[5],
+                                        'blockHash': row[6],
+                                        'swapAmount': row[7]
+                                    }
+            conn.close()
+        
+        return jsonify(result='ok', contractName=contractName, contractAddress=contractAddress, participantInfo=returnval)
     else:
         return jsonify(result='error', description='Smart Contract with the given name doesn\'t exist')
 
@@ -717,89 +803,191 @@ async def getParticipantDetails():
     if (contractName and contractAddress is None) or (contractName is None and contractAddress):
         return jsonify(result='error', description='pass both, contractName and contractAddress as url parameters')
 
+    #if os.path.isfile(dblocation) and os.path.isfile(contract_db):
     if os.path.isfile(dblocation):
         # Make db connection and fetch data
         conn = sqlite3.connect(dblocation)
         c = conn.cursor()
 
-        # Check if its a participant address
-        queryString = f"SELECT id, address,contractName, contractAddress, tokenAmount, transactionHash, blockNumber, blockHash FROM contractAddressMapping where address='{floAddress}' and addressType='participant'"
-        c.execute(queryString)
-        result = c.fetchall()
-        if len(result) != 0:
-            participationDetailsList = []
-            for row in result:
-                detailsDict = {}
-                detailsDict['contractName'] = row[2]
-                detailsDict['contractAddress'] = row[3]
-                detailsDict['tokenAmount'] = row[4]
-                detailsDict['transactionHash'] = row[5]
-
-                c.execute(
-                    f"select status, tokenIdentification, contractType, blockNumber, blockHash, incorporationDate, expiryDate, closeDate from activecontracts where contractName='{detailsDict['contractName']}' and contractAddress='{detailsDict['contractAddress']}'")
-                temp = c.fetchall()
-                detailsDict['status'] = temp[0][0]
-                detailsDict['tokenIdentification'] = temp[0][1]
-                detailsDict['contractType'] = temp[0][2]
-                detailsDict['blockNumber'] = temp[0][3]
-                detailsDict['blockHash'] = temp[0][4]
-                detailsDict['incorporationDate'] = temp[0][5]
-                if temp[0][6]:
-                    detailsDict['expiryDate'] = temp[0][6]
-                if temp[0][7]:
-                    detailsDict['closeDate'] = temp[0][7]
-
-                # check if the contract has been closed
-                contractDbName = '{}-{}.db'.format(detailsDict['contractName'].strip(),
-                                                   detailsDict['contractAddress'].strip())
-                filelocation = os.path.join(
-                    dbfolder, 'smartContracts', contractDbName)
-                if os.path.isfile(filelocation):
-                    # Make db connection and fetch data
-                    conn = sqlite3.connect(filelocation)
-                    c = conn.cursor()
-                    c.execute(
-                        'SELECT attribute,value FROM contractstructure')
-                    result = c.fetchall()
-
-                    contractStructure = {}
-                    conditionDict = {}
-                    counter = 0
-                    for item in result:
-                        if list(item)[0] == 'exitconditions':
-                            conditionDict[counter] = list(item)[1]
-                            counter = counter + 1
-                        else:
-                            contractStructure[list(item)[0]] = list(item)[1]
-                    if len(conditionDict) > 0:
-                        contractStructure['exitconditions'] = conditionDict
-                    del counter, conditionDict
-
-                    if 'exitconditions' in contractStructure:
-                        # contract is of the type external trigger
-                        # check if the contract has been closed
-                        c.execute(
-                            'select * from contractTransactionHistory where transactionType="trigger"')
-                        trigger = c.fetchall()
-
-                        if detailsDict['status'] == 'closed':
-                            c.execute(
-                                f"SELECT userChoice, winningAmount FROM contractparticipants where participantAddress='{floAddress}'")
-                            result = c.fetchall()
-                            conn.close()
-                            detailsDict['userChoice'] = result[0][0]
-                            detailsDict['winningAmount'] = result[0][1]
-                        else:
-                            c.execute(
-                                f"SELECT userChoice FROM contractparticipants where participantAddress='{floAddress}'")
-                            result = c.fetchall()
-                            conn.close()
-                            detailsDict['userChoice'] = result[0][0]
-
-                participationDetailsList.append(detailsDict)
-            return jsonify(result='ok', floAddress=floAddress, type='participant', participatedContracts=participationDetailsList)
+        if contractName is not None:
+            c.execute(f'SELECT * FROM contractAddressMapping WHERE address="{floAddress}" AND addressType="participant" AND contractName="{contractName}" AND contractAddress="{contractAddress}"')
         else:
-            return jsonify(result='error', description='Address hasn\'t participanted in any other contract')
+            c.execute(f'SELECT * FROM contractAddressMapping WHERE address="{floAddress}" AND addressType="participant"')
+        participant_address_contracts = c.fetchall()
+
+        if len(participant_address_contracts) != 0:
+            participationDetailsList = []
+            for contract in participant_address_contracts:
+                detailsDict = {}
+                contract_db = os.path.join(dbfolder, 'smartContracts', f"{contract[3]}-{contract[4]}.db")
+                # Make db connection and fetch contract structure
+                conn = sqlite3.connect(contract_db)
+                c = conn.cursor()
+
+                # Get details of the type of Smart Contract 
+                c.execute('SELECT attribute,value FROM contractstructure')
+                result = c.fetchall()
+
+                contractStructure = {}
+                conditionDict = {}
+                counter = 0
+                for item in result:
+                    if list(item)[0] == 'exitconditions':
+                        conditionDict[counter] = list(item)[1]
+                        counter = counter + 1
+                    else:
+                        contractStructure[list(item)[0]] = list(item)[1]
+                if len(conditionDict) > 0:
+                    contractStructure['exitconditions'] = conditionDict
+                del counter, conditionDict
+
+                if contractStructure['contractType']=='continuos-event' and contractStructure['subtype']=='tokenswap':
+                    # normal result + swap details 
+                    # what is a api detail 
+                    c.execute('SELECT * FROM contractparticipants WHERE participantAddress=?',(floAddress,))
+                    participant_details = c.fetchall()
+                    pdb.set_trace()
+
+                    if len(participant_details) > 0:
+                        participationList = []
+                        for participation in participant_details:
+                            c.execute("SELECT value FROM contractstructure WHERE attribute='selling_token'")
+                            structure = c.fetchall()
+                            detailsDict['participationAddress'] = floAddress
+                            detailsDict['participationAmount'] = participation[2]
+                            detailsDict['receivedAmount'] = float(participation[3])
+                            detailsDict['participationToken'] = contractStructure['accepting_token']
+                            detailsDict['receivedToken'] = contractStructure['selling_token']
+                            detailsDict['swapPrice_received_to_participation'] = float(participation[7])
+                            detailsDict['transactionHash'] = participation[4]
+                            detailsDict['blockNumber'] = participation[5]
+                            detailsDict['blockHash'] = participation[6]
+                            participationList.append(detailsDict)
+
+                    participationDetailsList.append(participationList)
+          
+                elif contractStructure['contractType']=='one-time-event' and 'payeeAddress' in contractStructure.keys():
+                    # normal results 
+                    conn = sqlite3.connect(dblocation)
+                    c = conn.cursor()
+                    detailsDict = {}
+                    detailsDict['contractName'] = contract[3]
+                    detailsDict['contractAddress'] = contract[4]
+                    detailsDict['tokenAmount'] = contract[5]
+                    detailsDict['transactionHash'] = contract[6]
+
+                    c.execute(f"select status, tokenIdentification, contractType, blockNumber, blockHash, incorporationDate, expiryDate, closeDate from activecontracts where contractName='{detailsDict['contractName']}' and contractAddress='{detailsDict['contractAddress']}'")
+                    temp = c.fetchall()
+                    detailsDict['status'] = temp[0][0]
+                    detailsDict['tokenIdentification'] = temp[0][1]
+                    detailsDict['contractType'] = temp[0][2]
+                    detailsDict['blockNumber'] = temp[0][3]
+                    detailsDict['blockHash'] = temp[0][4]
+                    detailsDict['incorporationDate'] = temp[0][5]
+                    if temp[0][6]:
+                        detailsDict['expiryDate'] = temp[0][6]
+                    if temp[0][7]:
+                        detailsDict['closeDate'] = temp[0][7]
+                    
+                    # check if the contract has been closed
+                    contractDbName = '{}-{}.db'.format(detailsDict['contractName'].strip(), detailsDict['contractAddress'].strip())
+                    filelocation = os.path.join(dbfolder, 'smartContracts', contractDbName)
+                    if os.path.isfile(filelocation):
+                        # Make db connection and fetch data
+                        conn = sqlite3.connect(filelocation)
+                        c = conn.cursor()
+                        c.execute('SELECT attribute,value FROM contractstructure')
+                        result = c.fetchall()
+                        contractStructure = {}
+                        conditionDict = {}
+                        counter = 0
+                        for item in result:
+                            if list(item)[0] == 'exitconditions':
+                                conditionDict[counter] = list(item)[1]
+                                counter = counter + 1
+                            else:
+                                contractStructure[list(item)[0]] = list(item)[1]
+                        if len(conditionDict) > 0:
+                            contractStructure['exitconditions'] = conditionDict
+                        del counter, conditionDict
+
+                        if 'payeeAddress' in contractStructure:
+                            # contract is of the type external trigger
+                            # check if the contract has been closed
+                            c.execute(f"SELECT tokenAmount FROM contractparticipants where participantAddress='{floAddress}'")
+                            result = c.fetchall()
+                            conn.close()
+                            detailsDict['tokenAmount'] = result[0][0]
+
+                elif contractStructure['contractType']=='one-time-event' and 'exitconditions' in contractStructure.keys():
+                    # normal results + winning/losing details 
+                    conn = sqlite3.connect(dblocation)
+                    c = conn.cursor()
+                    detailsDict = {}
+                    detailsDict['contractName'] = contract[3]
+                    detailsDict['contractAddress'] = contract[4]
+                    detailsDict['tokenAmount'] = contract[5]
+                    detailsDict['transactionHash'] = contract[6]
+
+                    c.execute(f"select status, tokenIdentification, contractType, blockNumber, blockHash, incorporationDate, expiryDate, closeDate from activecontracts where contractName='{detailsDict['contractName']}' and contractAddress='{detailsDict['contractAddress']}'")
+                    temp = c.fetchall()
+                    detailsDict['status'] = temp[0][0]
+                    detailsDict['tokenIdentification'] = temp[0][1]
+                    detailsDict['contractType'] = temp[0][2]
+                    detailsDict['blockNumber'] = temp[0][3]
+                    detailsDict['blockHash'] = temp[0][4]
+                    detailsDict['incorporationDate'] = temp[0][5]
+                    if temp[0][6]:
+                        detailsDict['expiryDate'] = temp[0][6]
+                    if temp[0][7]:
+                        detailsDict['closeDate'] = temp[0][7]
+
+                    # check if the contract has been closed
+                    contractDbName = '{}-{}.db'.format(detailsDict['contractName'].strip(), detailsDict['contractAddress'].strip())
+                    filelocation = os.path.join(dbfolder, 'smartContracts', contractDbName)
+                    if os.path.isfile(filelocation):
+                        # Make db connection and fetch data
+                        conn = sqlite3.connect(filelocation)
+                        c = conn.cursor()
+                        c.execute('SELECT attribute,value FROM contractstructure')
+                        result = c.fetchall()
+                        contractStructure = {}
+                        conditionDict = {}
+                        counter = 0
+                        for item in result:
+                            if list(item)[0] == 'exitconditions':
+                                conditionDict[counter] = list(item)[1]
+                                counter = counter + 1
+                            else:
+                                contractStructure[list(item)[0]] = list(item)[1]
+                        if len(conditionDict) > 0:
+                            contractStructure['exitconditions'] = conditionDict
+                        del counter, conditionDict
+
+                        if 'exitconditions' in contractStructure:
+                            # contract is of the type external trigger
+                            # check if the contract has been closed
+                            c.execute('select * from contractTransactionHistory where transactionType="trigger"')
+                            trigger = c.fetchall()
+
+                            if detailsDict['status'] == 'closed':
+                                c.execute(f"SELECT userChoice, winningAmount FROM contractparticipants where participantAddress='{floAddress}'")
+                                result = c.fetchall()
+                                conn.close()
+                                detailsDict['userChoice'] = result[0][0]
+                                detailsDict['winningAmount'] = result[0][1]
+                            else:
+                                c.execute(f"SELECT userChoice FROM contractparticipants where participantAddress='{floAddress}'")
+                                result = c.fetchall()
+                                conn.close()
+                                detailsDict['userChoice'] = result[0][0]
+
+                    participationDetailsList.append(detailsDict)
+                        
+            return jsonify(result='ok', floAddress=floAddress, type='participant', participatedContracts=participationDetailsList)
+
+        else:
+            return jsonify(result='error', description='Address hasn\'t participated in any other contract')
     else:
         return jsonify(result='error', description='System error. System db is missing')
 
@@ -815,8 +1003,7 @@ async def getsmartcontracttransactions():
     if contractAddress is None:
         return jsonify(result='error', description='Smart Contract\'s address hasn\'t been passed')
 
-    contractDbName = '{}-{}.db'.format(contractName.strip(),
-                                       contractAddress.strip())
+    contractDbName = '{}-{}.db'.format(contractName.strip(), contractAddress.strip())
     filelocation = os.path.join(dbfolder, 'smartContracts', contractDbName)
 
     if os.path.isfile(filelocation):
@@ -865,6 +1052,85 @@ async def gettransactiondetails(transactionHash):
         return jsonify(result='error', description='Transaction doesn\'t exist in database')
 
 
+@app.route('/api/v2.0/getTransactionDetails/<transactionHash>', methods=['GET'])
+async def gettransactiondetails1(transactionHash):
+    transactionJsonData = transactiondetailhelper(transactionHash)
+    if len(transactionJsonData) != 0:
+        transactionJson = json.loads(transactionJsonData[0][0])
+        parseResult = json.loads(transactionJsonData[0][1])
+        operation = transactionJsonData[0][2]
+        db_reference = transactionJsonData[0][3]
+
+        operationDetails = {}
+
+        if operation == 'smartContractDeposit':
+            # open the db reference and check if there is a deposit return 
+            conn = sqlite3.connect(f"{dbfolder}/smartContracts/{db_reference}.db")
+            c = conn.cursor()
+            c.execute("SELECT depositAmount, blockNumber FROM contractdeposits WHERE status='deposit-return' AND transactionHash=?",(transactionJson['txid'],))
+            returned_deposit_tx = c.fetchall()
+            if len(returned_deposit_tx) == 1:
+                operationDetails['returned_depositAmount'] = returned_deposit_tx[0][0]
+                operationDetails['returned_blockNumber'] = returned_deposit_tx[0][1]
+            c.execute("SELECT depositAmount, blockNumber FROM contractdeposits WHERE status='deposit-honor' AND transactionHash=?",(transactionJson['txid'],))
+            deposit_honors = c.fetchall()
+            operationDetails['depositHonors'] = {}
+            operationDetails['depositHonors']['list'] = []
+            operationDetails['depositHonors']['count'] = len(deposit_honors)
+            for deposit_honor in deposit_honors:
+                operationDetails['depositHonors']['list'].append({'honor_amount':deposit_honor[0],'blockNumber':deposit_honor[1]})
+            
+            c.execute("SELECT depositBalance FROM contractdeposits WHERE id=(SELECT max(id) FROM contractdeposits WHERE transactionHash=?)",(transactionJson['txid'],))
+            depositBalance = c.fetchall()
+            operationDetails['depositBalance'] = depositBalance[0][0]
+            operationDetails['consumedAmount'] = parseResult['depositAmount'] - operationDetails['depositBalance']
+
+        elif operation == 'tokenswap-participation':
+            conn = sqlite3.connect(f"{dbfolder}/smartContracts/{db_reference}.db")
+            c = conn.cursor()
+            c.execute('SELECT tokenAmount, winningAmount, userChoice FROM contractparticipants WHERE transactionHash=?',(transactionJson['txid'],))
+            swap_amounts = c.fetchall()
+            c.execute("SELECT value FROM contractstructure WHERE attribute='selling_token'")
+            structure = c.fetchall()
+            operationDetails['participationAmount'] = swap_amounts[0][0]
+            operationDetails['receivedAmount'] = swap_amounts[0][1]
+            operationDetails['participationToken'] = parseResult['tokenIdentification']
+            operationDetails['receivedToken'] = structure[0][0]
+            operationDetails['swapPrice_received_to_participation'] = float(swap_amounts[0][2])
+
+        elif operation == 'smartContractPays':
+            pdb.set_trace()
+            # Find what happened because of the trigger 
+            # Find who 
+            conn = sqlite3.connect(f"{dbfolder}/smartContracts/{db_reference}.db")
+            c = conn.cursor()
+            c.execute('SELECT participantAddress, tokenAmount, userChoice, winningAmount FROM contractparticipants WHERE winningAmount IS NOT NULL')
+            winner_participants = c.fetchall()
+            if len(winner_participants) != 0:
+                operationDetails['total_winners'] = len(winner_participants)
+                operationDetails['winning_choice'] = winner_participants[0][2]
+                operationDetails['winner_list'] = []
+                for participant in winner_participants:
+                    winner_details = {}
+                    winner_details['participantAddress'] = participant[0]
+                    winner_details['participationAmount'] = participant[1]
+                    winner_details['winningAmount'] = participant[3]
+                    operationDetails['winner_list'].append(winner_details)
+
+        elif operation == 'ote-externaltrigger-participation':
+            # Find if this guy has won 
+            conn = sqlite3.connect(f"{dbfolder}/smartContracts/{db_reference}.db")
+            c = conn.cursor()
+            c.execute('SELECT winningAmount FROM contractparticipants WHERE transactionHash=?',(transactionHash,))
+            winningAmount = c.fetchall()
+            if winningAmount[0][0] is not None:
+                operationDetails['winningAmount'] = winningAmount[0][0]
+
+        return jsonify(parsedFloData=parseResult, transactionDetails=transactionJson, transactionHash=transactionHash, operation=operation, operationDetails=operationDetails, result='ok')
+    else:
+        return jsonify(result='error', description='Transaction doesn\'t exist in database')
+
+
 @app.route('/api/v1.0/getLatestTransactionDetails', methods=['GET'])
 async def getLatestTransactionDetails():
 
@@ -888,8 +1154,7 @@ async def getLatestTransactionDetails():
             tx_parsed_details['transactionDetails'] = json.loads(item[3])
             tx_parsed_details['parsedFloData'] = json.loads(item[5])
             tx_parsed_details['parsedFloData']['transactionType'] = item[4]
-            tx_parsed_details['transactionDetails']['blockheight'] = int(
-                item[2])
+            tx_parsed_details['transactionDetails']['blockheight'] = int(item[2])
             tempdict[json.loads(item[3])['txid']] = tx_parsed_details
     else:
         c.execute('''SELECT * FROM latestTransactions WHERE blockNumber IN (SELECT DISTINCT blockNumber FROM latestTransactions ORDER BY blockNumber DESC LIMIT 100) ORDER BY id ASC;''')
@@ -902,8 +1167,7 @@ async def getLatestTransactionDetails():
             tx_parsed_details['transactionDetails'] = json.loads(item[3])
             tx_parsed_details['parsedFloData'] = json.loads(item[5])
             tx_parsed_details['parsedFloData']['transactionType'] = item[4]
-            tx_parsed_details['transactionDetails']['blockheight'] = int(
-                item[2])
+            tx_parsed_details['transactionDetails']['blockheight'] = int(item[2])
             tempdict[json.loads(item[3])['txid']] = tx_parsed_details
     return jsonify(result='ok', latestTransactions=tempdict)
 
@@ -1092,7 +1356,8 @@ class ServerSentEvent:
         return message.encode('utf-8')
 
 
-"""@app.route('/', methods=['GET'])
+"""
+@app.route('/', methods=['GET'])
 async def index():
     return await render_template('index.html')
 
@@ -1102,7 +1367,8 @@ async def broadcast():
     data = await request.get_json()
     for queue in app.clients:
         await queue.put(data['message'])
-    return jsonify(True) """
+    return jsonify(True) 
+"""
 
 
 @app.route('/sse')
@@ -1148,7 +1414,6 @@ async def getPriceData():
 
 
 ''' Stuff required for getPrices endpoint '''
-
 def updatePrices():
     prices = {}
     # USD -> INR
@@ -1166,7 +1431,7 @@ def updatePrices():
     # FLO->USD | FLO->INR
     response = requests.get(f"https://api.coinlore.net/api/ticker/?id=67")
     price = response.json()
-    prices["FLOUSD"] = price[0]['price_usd']
+    prices["FLOUSD"] = float(price[0]['price_usd'])
     prices["FLOINR"] = float(prices["FLOUSD"]) * float(prices['USDINR'])
 
     # 3. update latest price data
@@ -1185,8 +1450,7 @@ if not os.path.isfile(f"system.db"):
     # create an empty db
     conn = sqlite3.connect('system.db')
     c = conn.cursor()
-    c.execute('''CREATE TABLE ratepairs
-            (id integer primary key, ratepair text, price real)''')
+    c.execute('''CREATE TABLE ratepairs (id integer primary key, ratepair text, price real)''')
     c.execute("INSERT INTO ratepairs(ratepair, price) VALUES ('BTCBTC', 1)")
     c.execute("INSERT INTO ratepairs(ratepair, price) VALUES ('BTCUSD', -1)")
     c.execute("INSERT INTO ratepairs(ratepair, price) VALUES ('BTCINR', -1)")
