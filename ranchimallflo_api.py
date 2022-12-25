@@ -22,6 +22,7 @@ import pathlib
 import io 
 import zipfile
 import tarfile
+import pdb 
 
 
 app = Quart(__name__)
@@ -93,6 +94,11 @@ def transactiondetailhelper(transactionHash):
     transactionJsonData = c.fetchall()
 
     return transactionJsonData
+
+@app.route('/')
+async def welcome():
+    return 'welcome'
+
 
 # FLO TOKEN APIs
 @app.route('/api/v1.0/broadcastTx/<raw_transaction_hash>')
@@ -366,8 +372,7 @@ async def getFloAddressTransactions():
         if os.path.exists(dblocation):
             conn = sqlite3.connect(dblocation)
             c = conn.cursor()
-            c.execute(
-                'select token from tokenAddressMapping where tokenAddress="{}"'.format(floAddress))
+            c.execute('select token from tokenAddressMapping where tokenAddress="{}"'.format(floAddress))
             tokenNames = c.fetchall()
     else:
         dblocation = dbfolder + '/tokens/' + str(token) + '.db'
@@ -387,7 +392,7 @@ async def getFloAddressTransactions():
                 conn = sqlite3.connect(dblocation)
                 c = conn.cursor()
                 if limit is None:
-                    c.execute('SELECT jsonData, parsedFloData FROM transactionHistory WHERE sourceFloAddress="{}" OR destFloAddress="{}" ORDER BY id DESC LIMIT 100'.format(
+                    c.execute('SELECT jsonData, parsedFloData FROM transactionHistory WHERE sourceFloAddress="{}" OR destFloAddress="{}" ORDER BY id DESC'.format(
                         floAddress, floAddress))
                 else:
                     c.execute('SELECT jsonData, parsedFloData FROM transactionHistory WHERE sourceFloAddress="{}" OR destFloAddress="{}" ORDER BY id DESC LIMIT {}'.format(
@@ -399,8 +404,7 @@ async def getFloAddressTransactions():
                     temp = {}
                     temp['transactionDetails'] = json.loads(row[0])
                     temp['parsedFloData'] = json.loads(row[1])
-                    allTransactionList[temp['transactionDetails']
-                                       ['txid']] = temp
+                    allTransactionList[temp['transactionDetails']['txid']] = temp
 
         if token is None:
             return jsonify(result='ok', floAddress=floAddress, transactions=allTransactionList)
@@ -1207,4 +1211,4 @@ scheduler.start()
 atexit.register(lambda: scheduler.shutdown())
 
 if __name__ == "__main__":
-    app.run(debug=False, host='0.0.0.0', port=5009)
+    app.run(debug=False, host='0.0.0.0', port=5012)
