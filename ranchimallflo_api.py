@@ -8,6 +8,7 @@ import time
 from datetime import datetime
 from quart import jsonify, make_response, Quart, render_template, request, flash, redirect, url_for, send_file
 from quart_cors import cors
+import subprocess
 
 import asyncio
 from typing import Optional
@@ -177,37 +178,25 @@ async def getTokenTransactions():
 
     if senderFloAddress and not destFloAddress:
         if limit is None:
-            c.execute('SELECT jsonData, parsedFloData FROM transactionHistory WHERE sourceFloAddress="{}" ORDER BY id DESC LIMIT 100'.format(
-                senderFloAddress))
+            c.execute('SELECT jsonData, parsedFloData FROM transactionHistory WHERE sourceFloAddress="{}" ORDER BY id DESC'.format(senderFloAddress))
         else:
-            c.execute('SELECT jsonData, parsedFloData FROM transactionHistory WHERE sourceFloAddress="{}" ORDER BY id DESC LIMIT {}'.format(
-                senderFloAddress, limit))
+            c.execute('SELECT jsonData, parsedFloData FROM transactionHistory WHERE sourceFloAddress="{}" ORDER BY id DESC LIMIT {}'.format(senderFloAddress, limit))
     elif not senderFloAddress and destFloAddress:
         if limit is None:
-            c.execute(
-                'SELECT jsonData, parsedFloData FROM transactionHistory WHERE destFloAddress="{}" ORDER BY id DESC LIMIT 100'.format(
-                    destFloAddress))
+            c.execute('SELECT jsonData, parsedFloData FROM transactionHistory WHERE destFloAddress="{}" ORDER BY id DESC'.format(destFloAddress))
         else:
-            c.execute(
-                'SELECT jsonData, parsedFloData FROM transactionHistory WHERE destFloAddress="{}" ORDER BY id DESC LIMIT {}'.format(
-                    destFloAddress, limit))
+            c.execute('SELECT jsonData, parsedFloData FROM transactionHistory WHERE destFloAddress="{}" ORDER BY id DESC LIMIT {}'.format(destFloAddress, limit))
     elif senderFloAddress and destFloAddress:
         if limit is None:
-            c.execute(
-                'SELECT jsonData, parsedFloData FROM transactionHistory WHERE sourceFloAddress="{}" AND destFloAddress="{}" ORDER BY id DESC LIMIT 100'.format(
-                    senderFloAddress, destFloAddress))
+            c.execute('SELECT jsonData, parsedFloData FROM transactionHistory WHERE sourceFloAddress="{}" AND destFloAddress="{}" ORDER BY id DESC'.format(senderFloAddress, destFloAddress))
         else:
-            c.execute(
-                'SELECT jsonData, parsedFloData FROM transactionHistory WHERE sourceFloAddress="{}" AND destFloAddress="{}" ORDER BY id DESC LIMIT {}'.format(
-                    senderFloAddress, destFloAddress, limit))
+            c.execute('SELECT jsonData, parsedFloData FROM transactionHistory WHERE sourceFloAddress="{}" AND destFloAddress="{}" ORDER BY id DESC LIMIT {}'.format(senderFloAddress, destFloAddress, limit))
 
     else:
         if limit is None:
-            c.execute(
-                'SELECT jsonData, parsedFloData FROM transactionHistory ORDER BY id DESC LIMIT 100')
+            c.execute('SELECT jsonData, parsedFloData FROM transactionHistory ORDER BY id DESC')
         else:
-            c.execute(
-                'SELECT jsonData, parsedFloData FROM transactionHistory ORDER BY id DESC LIMIT {}'.format(limit))
+            c.execute('SELECT jsonData, parsedFloData FROM transactionHistory ORDER BY id DESC LIMIT {}'.format(limit))
     transactionJsonData = c.fetchall()
     conn.close()
     rowarray_list = {}
@@ -896,7 +885,7 @@ async def getLatestTransactionDetails():
                 item[2])
             tempdict[json.loads(item[3])['txid']] = tx_parsed_details
     else:
-        c.execute('''SELECT * FROM latestTransactions WHERE blockNumber IN (SELECT DISTINCT blockNumber FROM latestTransactions ORDER BY blockNumber DESC LIMIT 100) ORDER BY id ASC;''')
+        c.execute('''SELECT * FROM latestTransactions WHERE blockNumber IN (SELECT DISTINCT blockNumber FROM latestTransactions ORDER BY blockNumber DESC) ORDER BY id ASC;''')
         latestTransactions = c.fetchall()
         c.close()
         tempdict = {}
@@ -1056,19 +1045,6 @@ async def systemData():
     return jsonify(systemAddressCount=tokenAddressCount, systemBlockCount=validatedBlockCount, systemTransactionCount=validatedTransactionCount, systemSmartContractCount=contractCount, systemTokenCount=tokenCount, lastscannedblock=lastscannedblock, result='ok')
 
 
-'''@app.route('/api/v1.0/floscout-bootstrap')
-def request_zip():
-    directory = pathlib.Path("")
-    data = io.BytesIO()
-    with zipfile.ZipFile(data, mode="w") as archive:
-        for file_path in directory.rglob("*"):
-            archive.write(file_path, arcname=file_path.name)
-    data.seek(0)
-    return send_file( data,
-                            mimetype='application/zip',
-                            as_attachment=True,
-                            attachment_filename='data.zip')'''
-
 class ServerSentEvent:
 
     def __init__(
@@ -1095,20 +1071,6 @@ class ServerSentEvent:
         message = f"{message}\r\n\r\n"
         return message.encode('utf-8')
 
-
-"""@app.route('/', methods=['GET'])
-async def index():
-    return await render_template('index.html')
-
-
-@app.route('/', methods=['POST'])
-async def broadcast():
-    data = await request.get_json()
-    for queue in app.clients:
-        await queue.put(data['message'])
-    return jsonify(True) """
-
-
 @app.route('/sse')
 async def sse():
     queue = asyncio.Queue()
@@ -1133,6 +1095,16 @@ async def sse():
     )
     response.timeout = None
     return response
+
+@app.route('/api/v2.0/flocoreHeight')
+async def flocoreHeight_func():
+    testnet = request.args.get('testnet')
+    if testnet == None:
+        blockchaininfo = subprocess.check_output(f"{FLO_CLI_PATH} --datadir={FLO_DATA_DIR} getblockchaininfo", shell=True)
+    else:
+        blockchaininfo = subprocess.check_output([f"{FLO_CLI_PATH} --testnet --datadir={FLO_DATA_DIR} getblockchaininfo"], shell=True)
+    blockchaininfo = json.loads(blockchaininfo)
+    return jsonify(chain=blockchaininfo["chain"], blocks=blockchaininfo["blocks"],headers=blockchaininfo["headers"],bestblockhash=blockchaininfo["bestblockhash"],difficulty=blockchaininfo["difficulty"],mediantime=blockchaininfo["mediantime"])
 
 
 @app.route('/api/v1.0/getPrices', methods=['GET'])

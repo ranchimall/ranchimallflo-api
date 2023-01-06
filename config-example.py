@@ -1,7 +1,6 @@
-dbfolder = ''
-sse_pubKey = '<public key in the format of pybtc python library>'
-apiUrl = 'https://flosight.duckdns.org/api/'
-
-# your apilayer.net access key
-apilayerAccesskey = '<accesskey>'
-
+dbfolder = 'path to FLO Token Scanner data folder'
+sse_pubKey = ''
+apiUrl = 'flosight api url'
+apilayerAccesskey = 'api layer access key'
+FLO_DATA_DIR = '/home/username/.flo'
+FLO_CLI_PATH = '/usr/local/bin/flo-cli'
