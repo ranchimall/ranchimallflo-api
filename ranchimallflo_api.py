@@ -70,11 +70,9 @@ def blockdetailhelper(blockdetail):
     c = conn.cursor()
 
     if blockHash:
-        c.execute(
-            f"select jsonData from latestBlocks where blockHash='{blockHash}'")
+        c.execute(f"select jsonData from latestBlocks where blockHash='{blockHash}'")
     elif blockHeight:
-        c.execute(
-            f"select jsonData from latestBlocks where blockNumber='{blockHeight}'")
+        c.execute(f"select jsonData from latestBlocks where blockNumber='{blockHeight}'")
 
     blockJson = c.fetchall()
     return blockJson
@@ -174,6 +172,15 @@ def fetchContractStatus(contractName, contractAddress):
         return None
     else:
         return status[0][0]
+
+def extract_ip_op_addresses(transactionJson):
+    sender_address = transactionJson['vin'][0]['addr']
+    receiver_address = None
+    for utxo in transactionJson['vout']:
+        if utxo['scriptPubKey']['addresses'][0] == sender_address:
+            continue
+        receiver_address = utxo['scriptPubKey']['addresses'][0]
+    return sender_address, receiver_address
 
 
 @app.route('/')
@@ -1717,6 +1724,7 @@ async def transactiondetails1(transactionHash):
         parseResult = json.loads(transactionJsonData[0][1])
         operation = transactionJsonData[0][2]
         db_reference = transactionJsonData[0][3]
+        sender_address, receiver_address = extract_ip_op_addresses(transactionJson)
 
         operationDetails = {}
 
@@ -1782,7 +1790,7 @@ async def transactiondetails1(transactionHash):
             if winningAmount[0][0] is not None:
                 operationDetails['winningAmount'] = winningAmount[0][0]
 
-        return jsonify(parsedFloData=parseResult, transactionDetails=transactionJson, transactionHash=transactionHash, operation=operation, operationDetails=operationDetails), 200
+        return jsonify(parsedFloData=parseResult, transactionDetails=transactionJson, transactionHash=transactionHash, operation=operation, operationDetails=operationDetails, senderAddress=sender_address, receiverAddress=receiver_address), 200
     else:
         return jsonify(description='Transaction doesn\'t exist in database'), 404
 
