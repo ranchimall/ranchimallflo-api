@@ -8,7 +8,6 @@ import time
 from datetime import datetime
 from quart import jsonify, make_response, Quart, render_template, request, flash, redirect, url_for, send_file
 from quart_cors import cors
-
 import asyncio
 from typing import Optional
 
@@ -18,10 +17,7 @@ import subprocess
 
 from apscheduler.schedulers.background import BackgroundScheduler
 import atexit
-import pathlib
-import io 
-import zipfile
-import tarfile
+import pyflo
 import pdb
 
 
@@ -29,8 +25,20 @@ app = Quart(__name__)
 app.clients = set()
 app = cors(app, allow_origin="*")
 
+if net == 'mainnet':
+    is_testnet = False
+elif net == 'testnet':
+    is_testnet = True
 
-# helper functions
+
+# Validation functionss
+def check_flo_address(floaddress, is_testnet=False):
+    return pyflo.is_address_valid(floaddress, testnet=is_testnet)
+
+def check_integer(value):
+    return str.isdigit(value)
+
+# Helper functions
 def retryRequest(tempserverlist, apicall):
     if len(tempserverlist) != 0:
         try:
@@ -182,10 +190,42 @@ def extract_ip_op_addresses(transactionJson):
         receiver_address = utxo['scriptPubKey']['addresses'][0]
     return sender_address, receiver_address
 
+def updatePrices():
+    prices = {}
+    # USD -> INR
+    response = requests.get(f"https://api.exchangerate-api.com/v4/latest/usd")
+    price = response.json()
+    prices['USDINR'] = price['rates']['INR']
+
+    # Blockchain stuff : BTC,FLO -> USD,INR
+    # BTC->USD | BTC->INR
+    response = requests.get(f"https://api.coingecko.com/api/v3/simple/price?ids=bitcoin,flo&vs_currencies=usd,inr")
+    price = response.json()
+    prices['BTCUSD'] = price['bitcoin']['usd']
+    prices['BTCINR'] = price['bitcoin']['inr']
+
+    # FLO->USD | FLO->INR
+    response = requests.get(f"https://api.coinlore.net/api/ticker/?id=67")
+    price = response.json()
+    prices["FLOUSD"] = float(price[0]['price_usd'])
+    prices["FLOINR"] = float(prices["FLOUSD"]) * float(prices['USDINR'])
+
+    # 3. update latest price data
+    print('Prices updated at time: %s' % datetime.now())
+    print(prices)
+
+    conn = sqlite3.connect('system.db')
+    c = conn.cursor()
+    for pair in list(prices.items()):
+        pair = list(pair)
+        c.execute(f"UPDATE ratepairs SET price={pair[1]} WHERE ratepair='{pair[0]}'")
+    conn.commit()
+
 
 @app.route('/')
 async def welcome_msg():
     return jsonify('Welcome to RanchiMall FLO Api v2')
+
 
 @app.route('/api/v1.0/getSystemData', methods=['GET'])
 async def systemData():
@@ -207,35 +247,11 @@ async def systemData():
 
     return jsonify(systemAddressCount=tokenAddressCount, systemBlockCount=validatedBlockCount, systemTransactionCount=validatedTransactionCount, systemSmartContractCount=contractCount, systemTokenCount=tokenCount, lastscannedblock=lastscannedblock, result='ok')
 
-@app.route('/api/v2/info', methods=['GET'])
-async def info():
-    # query for the number of flo addresses in tokenAddress mapping
-    conn = sqlite3.connect(os.path.join(dbfolder, 'system.db'))
-    c = conn.cursor()
-    tokenAddressCount = c.execute('select count(distinct tokenAddress) from tokenAddressMapping').fetchall()[0][0]
-    tokenCount = c.execute('select count(distinct token) from tokenAddressMapping').fetchall()[0][0]
-    contractCount = c.execute('select count(distinct contractName) from contractAddressMapping').fetchall()[0][0]
-    lastscannedblock = int(c.execute("select value from systemData where attribute=='lastblockscanned'").fetchall()[0][0])
-    conn.close()
-
-    # query for total number of validated blocks
-    conn = sqlite3.connect(os.path.join(dbfolder, 'latestCache.db'))
-    c = conn.cursor()
-    validatedBlockCount = c.execute('select count(distinct blockNumber) from latestBlocks').fetchall()[0][0]
-    validatedTransactionCount = c.execute('select count(distinct transactionHash) from latestTransactions').fetchall()[0][0]
-    conn.close()
-
-    return jsonify(systemAddressCount=tokenAddressCount, systemBlockCount=validatedBlockCount, systemTransactionCount=validatedTransactionCount, systemSmartContractCount=contractCount, systemTokenCount=tokenCount, lastscannedblock=lastscannedblock), 200
 
 @app.route('/api/v1.0/broadcastTx/<raw_transaction_hash>')
 async def broadcastTx(raw_transaction_hash):
     p1 = subprocess.run(['flo-cli',f"-datadir={FLO_DATA_DIR}",'sendrawtransaction',raw_transaction_hash], capture_output=True)
     return jsonify(args=p1.args,returncode=p1.returncode,stdout=p1.stdout.decode(),stderr=p1.stderr.decode())
-
-@app.route('/api/v2/broadcastTx/<raw_transaction_hash>')
-async def broadcastTx_v2(raw_transaction_hash):
-    p1 = subprocess.run(['flo-cli',f"-datadir={FLO_DATA_DIR}",'sendrawtransaction',raw_transaction_hash], capture_output=True)
-    return jsonify(args=p1.args,returncode=p1.returncode,stdout=p1.stdout.decode(),stderr=p1.stderr.decode()), 200
 
 
 # FLO TOKEN APIs
@@ -247,16 +263,6 @@ async def getTokenList():
             filelist.append(item[:-3])
 
     return jsonify(tokens=filelist, result='ok')
-
-
-@app.route('/api/v2/tokenList', methods=['GET'])
-async def tokenList():
-    filelist = []
-    for item in os.listdir(os.path.join(dbfolder, 'tokens')):
-        if os.path.isfile(os.path.join(dbfolder, 'tokens', item)):
-            filelist.append(item[:-3])
-
-    return jsonify(tokens=filelist), 200
 
 
 @app.route('/api/v1.0/getTokenInfo', methods=['GET'])
@@ -296,41 +302,6 @@ async def getTokenInfo():
     return jsonify(result='ok', token=token, incorporationAddress=incorporationRow[1], tokenSupply=incorporationRow[3],
                    time=incorporationRow[6], blockchainReference=incorporationRow[7],
                    activeAddress_no=numberOf_distinctAddresses, totalTransactions=numberOf_transactions, associatedSmartContracts=associatedContractList)
-
-
-@app.route('/api/v2/tokenInfo/<token>', methods=['GET'])
-async def tokenInfo(token):
-    if token is None:
-        return jsonify(description='token name hasnt been passed'), 400
-
-    dblocation = dbfolder + '/tokens/' + str(token) + '.db'
-    if os.path.exists(dblocation):
-        conn = sqlite3.connect(dblocation)
-        c = conn.cursor()
-    else:
-        return jsonify(description='token doesn\'t exist'), 404
-    c.execute('SELECT * FROM transactionHistory WHERE id=1')
-    incorporationRow = c.fetchall()[0]
-    c.execute('SELECT COUNT (DISTINCT address) FROM activeTable')
-    numberOf_distinctAddresses = c.fetchall()[0][0]
-    c.execute('select max(id) from transactionHistory')
-    numberOf_transactions = c.fetchall()[0][0]
-    c.execute('select contractName, contractAddress, blockNumber, blockHash, transactionHash from tokenContractAssociation')
-    associatedContracts = c.fetchall()
-    conn.close()
-
-    associatedContractList = []
-    for item in associatedContracts:
-        tempdict = {}
-        item = list(item)
-        tempdict['contractName'] = item[0]
-        tempdict['contractAddress'] = item[1]
-        tempdict['blockNumber'] = item[2]
-        tempdict['blockHash'] = item[3]
-        tempdict['transactionHash'] = item[4]
-        associatedContractList.append(tempdict)
-
-    return jsonify(token=token, incorporationAddress=incorporationRow[1], tokenSupply=incorporationRow[3], time=incorporationRow[6], blockchainReference=incorporationRow[7], activeAddress_no=numberOf_distinctAddresses, totalTransactions=numberOf_transactions, associatedSmartContracts=associatedContractList), 200 
 
 
 @app.route('/api/v1.0/getTokenTransactions', methods=['GET'])
@@ -385,55 +356,6 @@ async def getTokenTransactions():
     return jsonify(result='ok', token=token, transactions=rowarray_list)
 
 
-@app.route('/api/v2/tokenTransactions/<token>', methods=['GET'])
-async def tokenTransactions(token):
-    if token is None:
-        return jsonify(description='token name hasnt been passed'), 400 
-
-    senderFloAddress = request.args.get('senderFloAddress')
-    destFloAddress = request.args.get('destFloAddress')
-    limit = request.args.get('limit')
-
-    dblocation = dbfolder + '/tokens/' + str(token) + '.db'
-    if os.path.exists(dblocation):
-        conn = sqlite3.connect(dblocation)
-        conn.row_factory = sqlite3.Row
-        c = conn.cursor()
-    else:
-        return jsonify(description='token doesn\'t exist'), 404
-
-    if senderFloAddress and not destFloAddress:
-        if limit is None:
-            c.execute('SELECT jsonData, parsedFloData FROM transactionHistory WHERE sourceFloAddress="{}" ORDER BY id DESC LIMIT 100'.format(senderFloAddress))
-        else:
-            c.execute('SELECT jsonData, parsedFloData FROM transactionHistory WHERE sourceFloAddress="{}" ORDER BY id DESC LIMIT {}'.format(senderFloAddress, limit))
-    elif not senderFloAddress and destFloAddress:
-        if limit is None:
-            c.execute('SELECT jsonData, parsedFloData FROM transactionHistory WHERE destFloAddress="{}" ORDER BY id DESC LIMIT 100'.format(destFloAddress))
-        else:
-            c.execute('SELECT jsonData, parsedFloData FROM transactionHistory WHERE destFloAddress="{}" ORDER BY id DESC LIMIT {}'.format(destFloAddress, limit))
-    elif senderFloAddress and destFloAddress:
-        if limit is None:
-            c.execute('SELECT jsonData, parsedFloData FROM transactionHistory WHERE sourceFloAddress="{}" AND destFloAddress="{}" ORDER BY id DESC LIMIT 100'.format(senderFloAddress, destFloAddress))
-        else:
-            c.execute('SELECT jsonData, parsedFloData FROM transactionHistory WHERE sourceFloAddress="{}" AND destFloAddress="{}" ORDER BY id DESC LIMIT {}'.format(senderFloAddress, destFloAddress, limit))
-
-    else:
-        if limit is None:
-            c.execute('SELECT jsonData, parsedFloData FROM transactionHistory ORDER BY id DESC LIMIT 100')
-        else:
-            c.execute('SELECT jsonData, parsedFloData FROM transactionHistory ORDER BY id DESC LIMIT {}'.format(limit))
-    transactionJsonData = c.fetchall()
-    conn.close()
-    rowarray_list = {}
-    for row in transactionJsonData:
-        temp = {}
-        temp['transactionDetails'] = json.loads(row[0])
-        temp['parsedFloData'] = json.loads(row[1])
-        rowarray_list[temp['transactionDetails']['txid']] = temp
-    return jsonify(token=token, transactions=rowarray_list), 200
-
-
 @app.route('/api/v1.0/getTokenBalances', methods=['GET'])
 async def getTokenBalances():
     token = request.args.get('token')
@@ -456,27 +378,6 @@ async def getTokenBalances():
         returnList[address[0]] = address[1]
 
     return jsonify(result='ok', token=token, balances=returnList)
-
-
-@app.route('/api/v2/tokenBalances/<token>', methods=['GET'])
-async def tokenBalances(token):
-    if token is None:
-        return jsonify(description='token name hasnt been passed'), 400
-
-    dblocation = dbfolder + '/tokens/' + str(token) + '.db'
-    if os.path.exists(dblocation):
-        conn = sqlite3.connect(dblocation)
-        c = conn.cursor()
-    else:
-        return jsonify(description='token doesn\'t exist'), 404
-    c.execute('SELECT address,SUM(transferBalance) FROM activeTable GROUP BY address')
-    addressBalances = c.fetchall()
-
-    returnList = {}
-    for address in addressBalances:
-        returnList[address[0]] = address[1]
-
-    return jsonify(token=token, balances=returnList), 200
 
 
 # FLO Address APIs
@@ -539,56 +440,6 @@ async def getFloAddressInfo():
                            incorporatedSmartContracts=None)
 
 
-@app.route('/api/v2/floAddressInfo/<floAddress>', methods=['GET'])
-async def floAddressInfo(floAddress):
-    if floAddress is None:
-        return jsonify(description='floAddress hasn\'t been passed'), 400
-
-    dblocation = dbfolder + '/system.db'
-    if os.path.exists(dblocation):
-        conn = sqlite3.connect(dblocation)
-        c = conn.cursor()
-        c.execute(f'SELECT token FROM tokenAddressMapping WHERE tokenAddress="{floAddress}"')
-        tokenNames = c.fetchall()
-        c.execute(f"SELECT contractName, status, tokenIdentification, contractType, transactionHash, blockNumber, blockHash FROM activecontracts WHERE contractAddress='{floAddress}'")
-        incorporatedContracts = c.fetchall()
-
-        if len(tokenNames) != 0:
-            detailList = {}
-            for token in tokenNames:
-                token = token[0]
-                dblocation = dbfolder + '/tokens/' + str(token) + '.db'
-                if os.path.exists(dblocation):
-                    tempdict = {}
-                    conn = sqlite3.connect(dblocation)
-                    c = conn.cursor()
-                    c.execute(f'SELECT SUM(transferBalance) FROM activeTable WHERE address="{floAddress}"')
-                    balance = c.fetchall()[0][0]
-                    tempdict['balance'] = balance
-                    tempdict['token'] = token
-                    detailList[token] = tempdict
-        else:
-            # Address is not associated with any token
-            return jsonify(description='FLO address is not associated with any tokens'), 404
-
-        if len(incorporatedContracts) != 0:
-            incorporatedSmartContracts = []
-            for contract in incorporatedContracts:
-                tempdict = {}
-                tempdict['contractName'] = contract[0]
-                tempdict['contractAddress'] = floAddress
-                tempdict['status'] = contract[1]
-                tempdict['tokenIdentification'] = contract[2]
-                tempdict['contractType'] = contract[3]
-                tempdict['transactionHash'] = contract[4]
-                tempdict['blockNumber'] = contract[5]
-                tempdict['blockHash'] = contract[6]
-                incorporatedSmartContracts.append(tempdict)
-        else:
-            incorporatedContracts=None
-        return jsonify(floAddress=floAddress, floAddressBalances=detailList, incorporatedSmartContracts=None), 200
-
-
 @app.route('/api/v1.0/getFloAddressBalance', methods=['GET'])
 async def getAddressBalance():
     floAddress = request.args.get('floAddress')
@@ -640,51 +491,6 @@ async def getAddressBalance():
         balance = c.fetchall()[0][0]
         conn.close()
         return jsonify(result='ok', token=token, floAddress=floAddress, balance=balance)
-
-
-@app.route('/api/v2/floAddressBalance/<floAddress>', methods=['GET'])
-async def floAddressBalance(floAddress):
-    if floAddress is None:
-        return jsonify(description='floAddress hasn\'t been passed'), 400
-
-    token = request.args.get('token')
-    if token is None:
-        dblocation = dbfolder + '/system.db'
-        if os.path.exists(dblocation):
-            conn = sqlite3.connect(dblocation)
-            c = conn.cursor()
-            c.execute(f'SELECT token FROM tokenAddressMapping WHERE tokenAddress="{floAddress}"')
-            tokenNames = c.fetchall()
-
-            if len(tokenNames) != 0:
-                detailList = {}
-                for token in tokenNames:
-                    token = token[0]
-                    dblocation = dbfolder + '/tokens/' + str(token) + '.db'
-                    if os.path.exists(dblocation):
-                        tempdict = {}
-                        conn = sqlite3.connect(dblocation)
-                        c = conn.cursor()
-                        c.execute(f'SELECT SUM(transferBalance) FROM activeTable WHERE address="{floAddress}"')
-                        balance = c.fetchall()[0][0]
-                        tempdict['balance'] = balance
-                        tempdict['token'] = token
-                        detailList[token] = tempdict
-                return jsonify(floAddress=floAddress, floAddressBalances=detailList), 200
-            else:
-                # Address is not associated with any token
-                return jsonify(floAddress=floAddress, floAddressBalances={}), 200
-    else:
-        dblocation = dbfolder + '/tokens/' + str(token) + '.db'
-        if os.path.exists(dblocation):
-            conn = sqlite3.connect(dblocation)
-            c = conn.cursor()
-        else:
-            return jsonify(description="token doesn't exist"), 404
-        c.execute(f'SELECT SUM(transferBalance) FROM activeTable WHERE address="{floAddress}"')
-        balance = c.fetchall()[0][0]
-        conn.close()
-        return jsonify(token=token, floAddress=floAddress, balance=balance), 200
 
 
 @app.route('/api/v1.0/getFloAddressTransactions', methods=['GET'])
@@ -742,58 +548,6 @@ async def getFloAddressTransactions():
             return jsonify(result='ok', floAddress=floAddress, transactions=allTransactionList, token=token)
     else:
         return jsonify(result='error', description='No token transactions present present on this address')
-
-
-@app.route('/api/v2/floAddressTransactions/<floAddress>', methods=['GET'])
-async def floAddressTransactions(floAddress):
-    if floAddress is None:
-        return jsonify(description='floAddress has not been passed'), 400
-
-    token = request.args.get('token')
-    limit = request.args.get('limit')
-    if token is None:
-        dblocation = dbfolder + '/system.db'
-        if os.path.exists(dblocation):
-            conn = sqlite3.connect(dblocation)
-            c = conn.cursor()
-            c.execute('select token from tokenAddressMapping where tokenAddress="{}"'.format(floAddress))
-            tokenNames = c.fetchall()
-    else:
-        dblocation = dbfolder + '/tokens/' + str(token) + '.db'
-        if os.path.exists(dblocation):
-            tokenNames = [[str(token), ]]
-        else:
-            return jsonify(description='token doesn\'t exist'), 404
-
-    if len(tokenNames) != 0:
-        allTransactionList = {}
-
-        for tokenname in tokenNames:
-            tokenname = tokenname[0]
-            dblocation = dbfolder + '/tokens/' + str(tokenname) + '.db'
-            if os.path.exists(dblocation):
-                tempdict = {}
-                conn = sqlite3.connect(dblocation)
-                c = conn.cursor()
-                if limit is None:
-                    c.execute(f'SELECT jsonData, parsedFloData FROM transactionHistory WHERE sourceFloAddress="{floAddress}" OR destFloAddress="{floAddress}" ORDER BY id DESC LIMIT 100')
-                else:
-                    c.execute(f'SELECT jsonData, parsedFloData FROM transactionHistory WHERE sourceFloAddress="{floAddress}" OR destFloAddress="{floAddress}" ORDER BY id DESC LIMIT {limit}')
-                transactionJsonData = c.fetchall()
-                conn.close()
-
-                for row in transactionJsonData:
-                    temp = {}
-                    temp['transactionDetails'] = json.loads(row[0])
-                    temp['parsedFloData'] = json.loads(row[1])
-                    allTransactionList[temp['transactionDetails']['txid']] = temp
-
-        if token is None:
-            return jsonify(floAddress=floAddress, transactions=allTransactionList), 200
-        else:
-            return jsonify(floAddress=floAddress, transactions=allTransactionList, token=token), 200
-    else:
-        return jsonify(floAddress=floAddress, transactions={}, token=token), 200
 
 
 # SMART CONTRACT APIs
@@ -887,32 +641,6 @@ async def getContractList():
 
             contractList.append(contractDict)
     
-    return jsonify(smartContracts=contractList, result='ok')
-
-
-@app.route('/api/v2/smartContractList', methods=['GET'])
-async def getContractList_v2():
-    contractName = request.args.get('contractName')
-    contractAddress = request.args.get('contractAddress')
-    # todo - Add validation for contractAddress and contractName to prevent SQL injection attacks
-    contractList = []
-    conn = sqlite3.connect(os.path.join(dbfolder, 'system.db'))
-    c = conn.cursor()
-    smart_contracts = return_smart_contracts(c, contractName, contractAddress)
-    for idx, contract in enumerate(smart_contracts):
-        contractDict = {}
-        contractDict['contractName'] = contract[1]
-        contractDict['contractAddress'] = contract[2]
-        contractDict['status'] = contract[3]
-        contractDict['tokenIdentification'] = contract[4]
-        contractDict['contractType'] = contract[5]
-        contractDict['transactionHash'] = contract[6]
-        contractDict['blockNumber'] = contract[7]
-        contractDict['incorporationDate'] = contract[8]
-        contractDict['expiryDate'] = contract[9]
-        contractDict['closeDate'] = contract[10]
-        contractList.append(contractDict)
-    conn.close()
     return jsonify(smartContracts=contractList, result='ok')
 
 
@@ -1017,55 +745,6 @@ async def getContractInfo():
         return jsonify(result='error', details='Smart Contract with the given name doesn\'t exist')
 
 
-@app.route('/api/v2/smartContractInfo', methods=['GET'])
-async def getContractInfo_v2():
-    contractName = request.args.get('contractName')
-    contractAddress = request.args.get('contractAddress')
-    if contractName is None:
-        return jsonify(description='Smart Contract\'s name hasn\'t been passed'), 400
-    if contractAddress is None:
-        return jsonify(description='Smart Contract\'s address hasn\'t been passed'), 400
-
-    contractName = contractName.strip()
-    contractAddress = contractAddress.strip()
-    contractStructure = fetchContractStructure(contractName, contractAddress)
-    if contractStructure:
-        returnval = contractStructure
-        # Categorize into what type of contract it is right now 
-        if contractStructure['contractType'] == 'continuos-event' and contractStructure['subtype'] == 'tokenswap':
-            conn, c = create_database_connection('smart_contract', {'contract_name': contractName, 'contract_address': contractAddress})
-            c.execute('select count(participantAddress), sum(tokenAmount), sum(winningAmount) from contractparticipants')
-            participation_details = c.fetchall()
-            returnval['numberOfParticipants'] = participation_details[0][0]
-            returnval['totalParticipationAmount'] = participation_details[0][1]
-            returnval['totalHonorAmount'] = participation_details[0][2]
-            c.execute('SELECT COUNT(DISTINCT transactionHash) FROM contractdeposits')
-            returnval['numberOfDeposits'] = c.fetchall()[0][0]
-
-        elif contractStructure['contractType'] == 'one-time-event' and 'exitconditions' in contractStructure.keys():
-            returnval['userChoice'] = contractStructure['exitconditions']
-            returnval.pop('exitconditions')
-            conn, c = create_database_connection('system_dbs')
-            c.execute('select status, incorporationDate, expiryDate, closeDate from activecontracts where contractName=="{}" and contractAddress=="{}"'.format(contractName.strip(), contractAddress.strip()))
-            results = c.fetchall()
-
-            if len(results) == 1:
-                for result in results:
-                    returnval['status'] = result[0]
-                    returnval['incorporationDate'] = result[1]
-                    if result[2]:
-                        returnval['expiryDate'] = result[2]
-                    if result[3]:
-                        returnval['closeDate'] = result[3]
-
-        elif contractStructure['contractType'] == 'one-time-event' and 'payeeAddress' in contractStructure.keys():
-            pass
-
-        return jsonify(contractName=contractName, contractAddress=contractAddress, contractInfo=returnval), 200
-    else:
-        return jsonify(details='Smart Contract with the given name doesn\'t exist'), 404
-
-
 @app.route('/api/v1.0/getSmartContractParticipants', methods=['GET'])
 async def getcontractparticipants():
     contractName = request.args.get('contractName')
@@ -1145,74 +824,6 @@ async def getcontractparticipants():
         return jsonify(result='ok', contractName=contractName, contractAddress=contractAddress, participantInfo=returnval)
     else:
         return jsonify(result='error', description='Smart Contract with the given name doesn\'t exist')
-
-
-@app.route('/api/v2/smartContractParticipants', methods=['GET'])
-async def getcontractparticipants_v2():
-    contractName = request.args.get('contractName')
-    contractAddress = request.args.get('contractAddress')
-
-    if contractName is None:
-        return jsonify(description='Smart Contract\'s name hasn\'t been passed'), 400
-    if contractAddress is None:
-        return jsonify(description='Smart Contract\'s address hasn\'t been passed'), 400 
-
-    contractName = contractName.strip()
-    contractAddress = contractAddress.strip()
-    filelocation = os.path.join(dbfolder, 'smartContracts', '{}-{}.db'.format(contractName, contractAddress))
-
-    if os.path.isfile(filelocation):
-        # Make db connection and fetch data
-        contractStructure = fetchContractStructure(contractName, contractAddress)
-        contractStatus = fetchContractStatus(contractName, contractAddress)
-        conn, c = create_database_connection('smart_contract', {'contract_name': contractName, 'contract_address': contractAddress})        
-        if 'exitconditions' in contractStructure:
-            # contract is of the type external trigger
-            # check if the contract has been closed
-            if contractStatus == 'closed':
-                token = contractStructure['tokenIdentification']
-                c.execute('SELECT id, participantAddress, tokenAmount, userChoice, transactionHash, winningAmount FROM contractparticipants')
-                result = c.fetchall()
-                returnval = {}
-                for row in result:
-                    returnval[row[1]] = {'participantFloAddress': row[1], 'tokenAmount': row[2], 'userChoice': row[3], 'transactionHash': row[4], 'winningAmount': row[5], 'tokenIdentification': token}
-
-            else:
-                c.execute('SELECT id, participantAddress, tokenAmount, userChoice, transactionHash FROM contractparticipants')
-                result = c.fetchall()
-                conn.close()
-                returnval = {}
-                for row in result:
-                    returnval[row[1]] = {'participantFloAddress': row[1], 'tokenAmount': row[2], 'userChoice': row[3], 'transactionHash': row[4]}
-
-        elif 'payeeAddress' in contractStructure:
-            # contract is of the type internal trigger
-            c.execute('SELECT id, participantAddress, tokenAmount, userChoice, transactionHash FROM contractparticipants')
-            result = c.fetchall()
-            conn.close()
-            returnval = {}
-            for row in result:
-                returnval[row[1]] = {'participantFloAddress': row[1], 'tokenAmount': row[2], 'transactionHash': row[4]}
-
-        elif contractStructure['contractType'] == 'continuos-event' and contractStructure['subtype'] == 'tokenswap':
-            c.execute('SELECT * FROM contractparticipants')
-            contract_participants = c.fetchall()
-            returnval = {}
-            for row in contract_participants:
-                returnval[row[1]] = {
-                                        'participantFloAddress': row[1], 
-                                        'participationAmount': row[2], 
-                                        'swapPrice': float(row[3]),
-                                        'transactionHash': row[4],
-                                        'blockNumber': row[5],
-                                        'blockHash': row[6],
-                                        'swapAmount': row[7]
-                                    }
-            conn.close()
-        
-        return jsonify(contractName=contractName, contractAddress=contractAddress, participantInfo=returnval), 200
-    else:
-        return jsonify(description='Smart Contract with the given name doesn\'t exist'), 404
 
 
 @app.route('/api/v1.0/getParticipantDetails', methods=['GET'])
@@ -1416,19 +1027,703 @@ async def getParticipantDetails():
         return jsonify(result='error', description='System error. System db is missing')
 
 
+@app.route('/api/v1.0/getSmartContractTransactions', methods=['GET'])
+async def getsmartcontracttransactions():
+    contractName = request.args.get('contractName')
+    contractAddress = request.args.get('contractAddress')
+
+    if contractName is None:
+        return jsonify(result='error', description='Smart Contract\'s name hasn\'t been passed')
+
+    if contractAddress is None:
+        return jsonify(result='error', description='Smart Contract\'s address hasn\'t been passed')
+
+    contractDbName = '{}-{}.db'.format(contractName.strip(), contractAddress.strip())
+    filelocation = os.path.join(dbfolder, 'smartContracts', contractDbName)
+
+    if os.path.isfile(filelocation):
+        # Make db connection and fetch data
+        conn = sqlite3.connect(filelocation)
+        c = conn.cursor()
+        c.execute('select jsonData, parsedFloData from contractTransactionHistory')
+        result = c.fetchall()
+        conn.close()
+        returnval = {}
+
+        for item in result:
+            temp = {}
+            temp['transactionDetails'] = json.loads(item[0])
+            temp['parsedFloData'] = json.loads(item[1])
+            returnval[temp['transactionDetails']['txid']] = temp
+
+        return jsonify(result='ok', contractName=contractName, contractAddress=contractAddress, contractTransactions=returnval)
+
+    else:
+        return jsonify(result='error', description='Smart Contract with the given name doesn\'t exist')
+
+
+@app.route('/api/v1.0/getBlockDetails/<blockdetail>', methods=['GET'])
+async def getblockdetails(blockdetail):
+    blockJson = blockdetailhelper(blockdetail)
+    if len(blockJson) != 0:
+        blockJson = json.loads(blockJson[0][0])
+        return jsonify(result='ok', blockDetails=blockJson)
+    else:
+        return jsonify(result='error', description='Block doesn\'t exist in database')
+
+
+@app.route('/api/v1.0/getTransactionDetails/<transactionHash>', methods=['GET'])
+async def gettransactiondetails(transactionHash):
+
+    transactionJsonData = transactiondetailhelper(transactionHash)
+
+    if len(transactionJsonData) != 0:
+        transactionJson = json.loads(transactionJsonData[0][0])
+        parseResult = json.loads(transactionJsonData[0][1])
+
+        return jsonify(parsedFloData=parseResult, transactionDetails=transactionJson, transactionHash=transactionHash, result='ok')
+    else:
+        return jsonify(result='error', description='Transaction doesn\'t exist in database')
+
+
+@app.route('/api/v1.0/getLatestTransactionDetails', methods=['GET'])
+async def getLatestTransactionDetails():
+    numberOfLatestBlocks = request.args.get('numberOfLatestBlocks')
+
+    dblocation = dbfolder + '/latestCache.db'
+    if os.path.exists(dblocation):
+        conn = sqlite3.connect(dblocation)
+        c = conn.cursor()
+    else:
+        return 'Latest transactions db doesn\'t exist. This is unusual, please report on https://github.com/ranchimall/ranchimallflo-api'
+
+    if numberOfLatestBlocks is not None:
+        c.execute('SELECT * FROM latestTransactions WHERE blockNumber IN (SELECT DISTINCT blockNumber FROM latestTransactions ORDER BY blockNumber DESC LIMIT {}) ORDER BY id ASC;'.format(int(numberOfLatestBlocks)))
+        latestTransactions = c.fetchall()
+        c.close()
+        tempdict = {}
+        for idx, item in enumerate(latestTransactions):
+            item = list(item)
+            tx_parsed_details = {}
+            tx_parsed_details['transactionDetails'] = json.loads(item[3])
+            tx_parsed_details['parsedFloData'] = json.loads(item[5])
+            tx_parsed_details['parsedFloData']['transactionType'] = item[4]
+            tx_parsed_details['transactionDetails']['blockheight'] = int(item[2])
+            tempdict[json.loads(item[3])['txid']] = tx_parsed_details
+    else:
+        c.execute('''SELECT * FROM latestTransactions WHERE blockNumber IN (SELECT DISTINCT blockNumber FROM latestTransactions ORDER BY blockNumber DESC LIMIT 100) ORDER BY id ASC;''')
+        latestTransactions = c.fetchall()
+        c.close()
+        tempdict = {}
+        for idx, item in enumerate(latestTransactions):
+            item = list(item)
+            tx_parsed_details = {}
+            tx_parsed_details['transactionDetails'] = json.loads(item[3])
+            tx_parsed_details['parsedFloData'] = json.loads(item[5])
+            tx_parsed_details['parsedFloData']['transactionType'] = item[4]
+            tx_parsed_details['transactionDetails']['blockheight'] = int(item[2])
+            tempdict[json.loads(item[3])['txid']] = tx_parsed_details
+    return jsonify(result='ok', latestTransactions=tempdict)
+
+
+@app.route('/api/v1.0/getLatestBlockDetails', methods=['GET'])
+async def getLatestBlockDetails():
+    limit = request.args.get('limit')
+
+    dblocation = dbfolder + '/latestCache.db'
+    if os.path.exists(dblocation):
+        conn = sqlite3.connect(dblocation)
+        c = conn.cursor()
+    else:
+        return 'Latest transactions db doesn\'t exist. This is unusual, please report on https://github.com/ranchimall/ranchimallflo-api'
+
+    if limit is None:
+        c.execute('''SELECT * FROM ( SELECT * FROM latestBlocks ORDER BY blockNumber DESC LIMIT 4) ORDER BY id ASC;''')
+    else:
+        int(limit)
+        c.execute('SELECT * FROM ( SELECT * FROM latestBlocks ORDER BY blockNumber DESC LIMIT {}) ORDER BY id ASC;'.format(limit))
+    latestBlocks = c.fetchall()
+    c.close()
+    tempdict = {}
+    for idx, item in enumerate(latestBlocks):
+        tempdict[json.loads(item[3])['hash']] = json.loads(item[3])
+    return jsonify(result='ok', latestBlocks=tempdict)
+
+
+@app.route('/api/v1.0/getBlockTransactions/<blockdetail>', methods=['GET'])
+async def getblocktransactions(blockdetail):
+    blockJson = blockdetailhelper(blockdetail)
+    if len(blockJson) != 0:
+        blockJson = json.loads(blockJson[0][0])
+        blocktxlist = blockJson['tx']
+        blocktxs = {}
+        for i in range(len(blocktxlist)):
+            temptx = transactiondetailhelper(blocktxlist[i])                        
+            transactionJson = json.loads(temptx[0][0])
+            parseResult = json.loads(temptx[0][1])
+            blocktxs[blocktxlist[i]] = {
+                "parsedFloData" : parseResult,
+                "transactionDetails" : transactionJson
+            }
+        return jsonify(result='ok', transactions=blocktxs, blockKeyword=blockdetail)
+    else:
+        return jsonify(result='error', description='Block doesn\'t exist in database')
+
+
+@app.route('/api/v1.0/categoriseString/<urlstring>')
+async def categoriseString(urlstring):
+    # check if the hash is of a transaction
+    response = requests.get('{}tx/{}'.format(apiUrl, urlstring))
+    if response.status_code == 200:
+        return jsonify(type='transaction')
+    else:
+        response = requests.get('{}block/{}'.format(apiUrl, urlstring))
+        if response.status_code == 200:
+            return jsonify(type='block')
+        else:
+            # check urlstring is a token name
+            tokenfolder = os.path.join(dbfolder, 'tokens')
+            onlyfiles = [f[:-3]
+                         for f in os.listdir(tokenfolder) if os.path.isfile(os.path.join(tokenfolder, f))]
+
+            if urlstring.lower() in onlyfiles:
+                return jsonify(type='token')
+            else:
+                contractfolder = os.path.join(dbfolder, 'system.db')
+                conn = sqlite3.connect(contractfolder)
+                conn.row_factory = lambda cursor, row: row[0]
+                c = conn.cursor()
+                contractList = c.execute(
+                    'select contractname from activeContracts').fetchall()
+
+                if urlstring.lower() in contractList:
+                    return jsonify(type='smartContract')
+                else:
+                    return jsonify(type='noise')
+
+
+@app.route('/api/v1.0/getTokenSmartContractList', methods=['GET'])
+async def getTokenSmartContractList():
+    # list of tokens
+    filelist = []
+    for item in os.listdir(os.path.join(dbfolder, 'tokens')):
+        if os.path.isfile(os.path.join(dbfolder, 'tokens', item)):
+            filelist.append(item[:-3])
+
+    # list of smart contracts
+    conn = sqlite3.connect(os.path.join(dbfolder, 'system.db'))
+    c = conn.cursor()
+
+    contractList = []
+
+    c.execute('select * from activecontracts')
+    allcontractsDetailList = c.fetchall()
+    for idx, contract in enumerate(allcontractsDetailList):
+        contractDict = {}
+        contractDict['contractName'] = contract[1]
+        contractDict['contractAddress'] = contract[2]
+        contractDict['status'] = contract[3]
+        contractDict['tokenIdentification'] = contract[4]
+        contractDict['contractType'] = contract[5]
+        contractDict['transactionHash'] = contract[6]
+        contractDict['blockNumber'] = contract[7]
+        contractDict['blockHash'] = contract[8]
+        contractDict['incorporationDate'] = contract[9]
+        if contract[10]:
+            contractDict['expiryDate'] = contract[10]
+        if contract[11]:
+            contractDict['closeDate'] = contract[11]
+
+        contractList.append(contractDict)
+
+    return jsonify(tokens=filelist, smartContracts=contractList, result='ok')
+
+
+###################
+###  VERSION 2  ###
+###################
+
+@app.route('/api/v2/info', methods=['GET'])
+async def info():
+    # query for the number of flo addresses in tokenAddress mapping
+    conn = sqlite3.connect(os.path.join(dbfolder, 'system.db'))
+    c = conn.cursor()
+    tokenAddressCount = c.execute('select count(distinct tokenAddress) from tokenAddressMapping').fetchall()[0][0]
+    tokenCount = c.execute('select count(distinct token) from tokenAddressMapping').fetchall()[0][0]
+    contractCount = c.execute('select count(distinct contractName) from contractAddressMapping').fetchall()[0][0]
+    lastscannedblock = int(c.execute("select value from systemData where attribute=='lastblockscanned'").fetchall()[0][0])
+    conn.close()
+
+    # query for total number of validated blocks
+    conn = sqlite3.connect(os.path.join(dbfolder, 'latestCache.db'))
+    c = conn.cursor()
+    validatedBlockCount = c.execute('select count(distinct blockNumber) from latestBlocks').fetchall()[0][0]
+    validatedTransactionCount = c.execute('select count(distinct transactionHash) from latestTransactions').fetchall()[0][0]
+    conn.close()
+
+    return jsonify(systemAddressCount=tokenAddressCount, systemBlockCount=validatedBlockCount, systemTransactionCount=validatedTransactionCount, systemSmartContractCount=contractCount, systemTokenCount=tokenCount, lastscannedblock=lastscannedblock), 200
+
+
+@app.route('/api/v2/broadcastTx/<raw_transaction_hash>')
+async def broadcastTx_v2(raw_transaction_hash):
+    p1 = subprocess.run(['flo-cli',f"-datadir={FLO_DATA_DIR}",'sendrawtransaction',raw_transaction_hash], capture_output=True)
+    return jsonify(args=p1.args,returncode=p1.returncode,stdout=p1.stdout.decode(),stderr=p1.stderr.decode()), 200
+
+
+# FLO TOKEN APIs
+@app.route('/api/v2/tokenList', methods=['GET'])
+async def tokenList():
+    filelist = []
+    for item in os.listdir(os.path.join(dbfolder, 'tokens')):
+        if os.path.isfile(os.path.join(dbfolder, 'tokens', item)):
+            filelist.append(item[:-3])
+
+    return jsonify(tokens=filelist), 200
+
+
+@app.route('/api/v2/tokenInfo/<token>', methods=['GET'])
+async def tokenInfo(token):
+    if token is None:
+        return jsonify(description='token name hasnt been passed'), 400
+
+    # todo : input validation
+
+    dblocation = dbfolder + '/tokens/' + str(token) + '.db'
+    if os.path.exists(dblocation):
+        conn = sqlite3.connect(dblocation)
+        c = conn.cursor()
+    else:
+        return jsonify(description='token doesn\'t exist'), 404
+    c.execute('SELECT * FROM transactionHistory WHERE id=1')
+    incorporationRow = c.fetchall()[0]
+    c.execute('SELECT COUNT (DISTINCT address) FROM activeTable')
+    numberOf_distinctAddresses = c.fetchall()[0][0]
+    c.execute('select max(id) from transactionHistory')
+    numberOf_transactions = c.fetchall()[0][0]
+    c.execute('select contractName, contractAddress, blockNumber, blockHash, transactionHash from tokenContractAssociation')
+    associatedContracts = c.fetchall()
+    conn.close()
+
+    associatedContractList = []
+    for item in associatedContracts:
+        tempdict = {}
+        item = list(item)
+        tempdict['contractName'] = item[0]
+        tempdict['contractAddress'] = item[1]
+        tempdict['blockNumber'] = item[2]
+        tempdict['blockHash'] = item[3]
+        tempdict['transactionHash'] = item[4]
+        associatedContractList.append(tempdict)
+
+    return jsonify(token=token, incorporationAddress=incorporationRow[1], tokenSupply=incorporationRow[3], time=incorporationRow[6], blockchainReference=incorporationRow[7], activeAddress_no=numberOf_distinctAddresses, totalTransactions=numberOf_transactions, associatedSmartContracts=associatedContractList), 200 
+
+
+@app.route('/api/v2/tokenTransactions/<token>', methods=['GET'])
+async def tokenTransactions(token):
+    if token is None:
+        return jsonify(description='token name hasnt been passed'), 400 
+
+    # Input validations
+    senderFloAddress = request.args.get('senderFloAddress')
+    if senderFloAddress is not None and not check_flo_address(senderFloAddress, is_testnet):
+        return jsonify(description='senderFloAddress validation failed'), 400
+    destFloAddress = request.args.get('destFloAddress')
+    if destFloAddress is not None and not check_flo_address(destFloAddress, is_testnet):
+        return jsonify(description='destFloAddress validation failed'), 400
+    limit = request.args.get('limit')
+    if limit is not None and not check_integer(limit):
+        return jsonify(description='limit validation failed'), 400
+
+    dblocation = dbfolder + '/tokens/' + str(token) + '.db'
+    if os.path.exists(dblocation):
+        conn = sqlite3.connect(dblocation)
+        conn.row_factory = sqlite3.Row
+        c = conn.cursor()
+    else:
+        return jsonify(description='token doesn\'t exist'), 404
+
+    if senderFloAddress and not destFloAddress:
+        if limit is None:
+            c.execute('SELECT jsonData, parsedFloData FROM transactionHistory WHERE sourceFloAddress="{}" ORDER BY id DESC LIMIT 100'.format(senderFloAddress))
+        else:
+            c.execute('SELECT jsonData, parsedFloData FROM transactionHistory WHERE sourceFloAddress="{}" ORDER BY id DESC LIMIT {}'.format(senderFloAddress, limit))
+    elif not senderFloAddress and destFloAddress:
+        if limit is None:
+            c.execute('SELECT jsonData, parsedFloData FROM transactionHistory WHERE destFloAddress="{}" ORDER BY id DESC LIMIT 100'.format(destFloAddress))
+        else:
+            c.execute('SELECT jsonData, parsedFloData FROM transactionHistory WHERE destFloAddress="{}" ORDER BY id DESC LIMIT {}'.format(destFloAddress, limit))
+    elif senderFloAddress and destFloAddress:
+        if limit is None:
+            c.execute('SELECT jsonData, parsedFloData FROM transactionHistory WHERE sourceFloAddress="{}" AND destFloAddress="{}" ORDER BY id DESC LIMIT 100'.format(senderFloAddress, destFloAddress))
+        else:
+            c.execute('SELECT jsonData, parsedFloData FROM transactionHistory WHERE sourceFloAddress="{}" AND destFloAddress="{}" ORDER BY id DESC LIMIT {}'.format(senderFloAddress, destFloAddress, limit))
+
+    else:
+        if limit is None:
+            c.execute('SELECT jsonData, parsedFloData FROM transactionHistory ORDER BY id DESC LIMIT 100')
+        else:
+            c.execute('SELECT jsonData, parsedFloData FROM transactionHistory ORDER BY id DESC LIMIT {}'.format(limit))
+    transactionJsonData = c.fetchall()
+    conn.close()
+    rowarray_list = {}
+    for row in transactionJsonData:
+        temp = {}
+        temp['transactionDetails'] = json.loads(row[0])
+        temp['parsedFloData'] = json.loads(row[1])
+        rowarray_list[temp['transactionDetails']['txid']] = temp
+    return jsonify(token=token, transactions=rowarray_list), 200
+
+
+@app.route('/api/v2/tokenBalances/<token>', methods=['GET'])
+async def tokenBalances(token):
+    if token is None:
+        return jsonify(description='token name hasnt been passed'), 400
+
+    dblocation = dbfolder + '/tokens/' + str(token) + '.db'
+    if os.path.exists(dblocation):
+        conn = sqlite3.connect(dblocation)
+        c = conn.cursor()
+    else:
+        return jsonify(description='token doesn\'t exist'), 404
+    c.execute('SELECT address,SUM(transferBalance) FROM activeTable GROUP BY address')
+    addressBalances = c.fetchall()
+
+    returnList = {}
+    for address in addressBalances:
+        returnList[address[0]] = address[1]
+
+    return jsonify(token=token, balances=returnList), 200
+
+
+# FLO Address APIs
+@app.route('/api/v2/floAddressInfo/<floAddress>', methods=['GET'])
+async def floAddressInfo(floAddress):
+    if floAddress is None:
+        return jsonify(description='floAddress hasn\'t been passed'), 400
+    # input validation
+    if not check_flo_address(floAddress, is_testnet):
+        return jsonify(description='floAddress validation failed'), 400 
+
+    dblocation = dbfolder + '/system.db'
+    if os.path.exists(dblocation):
+        conn = sqlite3.connect(dblocation)
+        c = conn.cursor()
+        c.execute(f'SELECT token FROM tokenAddressMapping WHERE tokenAddress="{floAddress}"')
+        tokenNames = c.fetchall()
+        c.execute(f"SELECT contractName, status, tokenIdentification, contractType, transactionHash, blockNumber, blockHash FROM activecontracts WHERE contractAddress='{floAddress}'")
+        incorporatedContracts = c.fetchall()
+
+        if len(tokenNames) != 0:
+            detailList = {}
+            for token in tokenNames:
+                token = token[0]
+                dblocation = dbfolder + '/tokens/' + str(token) + '.db'
+                if os.path.exists(dblocation):
+                    tempdict = {}
+                    conn = sqlite3.connect(dblocation)
+                    c = conn.cursor()
+                    c.execute(f'SELECT SUM(transferBalance) FROM activeTable WHERE address="{floAddress}"')
+                    balance = c.fetchall()[0][0]
+                    tempdict['balance'] = balance
+                    tempdict['token'] = token
+                    detailList[token] = tempdict
+        else:
+            # Address is not associated with any token
+            return jsonify(description='FLO address is not associated with any tokens'), 404
+
+        if len(incorporatedContracts) != 0:
+            incorporatedSmartContracts = []
+            for contract in incorporatedContracts:
+                tempdict = {}
+                tempdict['contractName'] = contract[0]
+                tempdict['contractAddress'] = floAddress
+                tempdict['status'] = contract[1]
+                tempdict['tokenIdentification'] = contract[2]
+                tempdict['contractType'] = contract[3]
+                tempdict['transactionHash'] = contract[4]
+                tempdict['blockNumber'] = contract[5]
+                tempdict['blockHash'] = contract[6]
+                incorporatedSmartContracts.append(tempdict)
+        else:
+            incorporatedContracts=None
+        return jsonify(floAddress=floAddress, floAddressBalances=detailList, incorporatedSmartContracts=None), 200
+
+
+@app.route('/api/v2/floAddressBalance/<floAddress>', methods=['GET'])
+async def floAddressBalance(floAddress):
+    if floAddress is None:
+        return jsonify(description='floAddress hasn\'t been passed'), 400
+    # input validation
+    if not check_flo_address(floAddress, is_testnet):
+        return jsonify(description='floAddress validation failed'), 400 
+
+    token = request.args.get('token')
+    if token is None:
+        dblocation = dbfolder + '/system.db'
+        if os.path.exists(dblocation):
+            conn = sqlite3.connect(dblocation)
+            c = conn.cursor()
+            c.execute(f'SELECT token FROM tokenAddressMapping WHERE tokenAddress="{floAddress}"')
+            tokenNames = c.fetchall()
+
+            if len(tokenNames) != 0:
+                detailList = {}
+                for token in tokenNames:
+                    token = token[0]
+                    dblocation = dbfolder + '/tokens/' + str(token) + '.db'
+                    if os.path.exists(dblocation):
+                        tempdict = {}
+                        conn = sqlite3.connect(dblocation)
+                        c = conn.cursor()
+                        c.execute(f'SELECT SUM(transferBalance) FROM activeTable WHERE address="{floAddress}"')
+                        balance = c.fetchall()[0][0]
+                        tempdict['balance'] = balance
+                        tempdict['token'] = token
+                        detailList[token] = tempdict
+                return jsonify(floAddress=floAddress, floAddressBalances=detailList), 200
+            else:
+                # Address is not associated with any token
+                return jsonify(floAddress=floAddress, floAddressBalances={}), 200
+    else:
+        dblocation = dbfolder + '/tokens/' + str(token) + '.db'
+        if os.path.exists(dblocation):
+            conn = sqlite3.connect(dblocation)
+            c = conn.cursor()
+        else:
+            return jsonify(description="token doesn't exist"), 404
+        c.execute(f'SELECT SUM(transferBalance) FROM activeTable WHERE address="{floAddress}"')
+        balance = c.fetchall()[0][0]
+        conn.close()
+        return jsonify(token=token, floAddress=floAddress, balance=balance), 200
+
+
+@app.route('/api/v2/floAddressTransactions/<floAddress>', methods=['GET'])
+async def floAddressTransactions(floAddress):
+    if floAddress is None:
+        return jsonify(description='floAddress has not been passed'), 400
+    if not check_flo_address(floAddress, is_testnet):
+        return jsonify(description='floAddress validation failed'), 400 
+    limit = request.args.get('limit')
+    if limit is not None and not check_integer(limit):
+        return jsonify(description='limit validation failed'), 400
+
+    token = request.args.get('token')
+    if token is None:
+        dblocation = dbfolder + '/system.db'
+        if os.path.exists(dblocation):
+            conn = sqlite3.connect(dblocation)
+            c = conn.cursor()
+            c.execute('select token from tokenAddressMapping where tokenAddress="{}"'.format(floAddress))
+            tokenNames = c.fetchall()
+    else:
+        dblocation = dbfolder + '/tokens/' + str(token) + '.db'
+        if os.path.exists(dblocation):
+            tokenNames = [[str(token), ]]
+        else:
+            return jsonify(description='token doesn\'t exist'), 404
+
+    if len(tokenNames) != 0:
+        allTransactionList = {}
+
+        for tokenname in tokenNames:
+            tokenname = tokenname[0]
+            dblocation = dbfolder + '/tokens/' + str(tokenname) + '.db'
+            if os.path.exists(dblocation):
+                tempdict = {}
+                conn = sqlite3.connect(dblocation)
+                c = conn.cursor()
+                if limit is None:
+                    c.execute(f'SELECT jsonData, parsedFloData FROM transactionHistory WHERE sourceFloAddress="{floAddress}" OR destFloAddress="{floAddress}" ORDER BY id DESC LIMIT 100')
+                else:
+                    c.execute(f'SELECT jsonData, parsedFloData FROM transactionHistory WHERE sourceFloAddress="{floAddress}" OR destFloAddress="{floAddress}" ORDER BY id DESC LIMIT {limit}')
+                transactionJsonData = c.fetchall()
+                conn.close()
+
+                for row in transactionJsonData:
+                    temp = {}
+                    temp['transactionDetails'] = json.loads(row[0])
+                    temp['parsedFloData'] = json.loads(row[1])
+                    allTransactionList[temp['transactionDetails']['txid']] = temp
+
+        if token is None:
+            return jsonify(floAddress=floAddress, transactions=allTransactionList), 200
+        else:
+            return jsonify(floAddress=floAddress, transactions=allTransactionList, token=token), 200
+    else:
+        return jsonify(floAddress=floAddress, transactions={}, token=token), 200
+
+
+# SMART CONTRACT APIs
+@app.route('/api/v2/smartContractList', methods=['GET'])
+async def getContractList_v2():
+    contractName = request.args.get('contractName')
+    contractAddress = request.args.get('contractAddress')
+    # todo - Add validation for contractAddress and contractName to prevent SQL injection attacks
+    if contractAddress is not None and not check_flo_address(contractAddress, is_testnet):
+        return jsonify(description='contractAddress validation failed'), 400
+    
+    contractList = []
+    conn = sqlite3.connect(os.path.join(dbfolder, 'system.db'))
+    c = conn.cursor()
+    smart_contracts = return_smart_contracts(c, contractName, contractAddress)
+    for idx, contract in enumerate(smart_contracts):
+        contractDict = {}
+        contractDict['contractName'] = contract[1]
+        contractDict['contractAddress'] = contract[2]
+        contractDict['status'] = contract[3]
+        contractDict['tokenIdentification'] = contract[4]
+        contractDict['contractType'] = contract[5]
+        contractDict['transactionHash'] = contract[6]
+        contractDict['blockNumber'] = contract[7]
+        contractDict['incorporationDate'] = contract[8]
+        contractDict['expiryDate'] = contract[9]
+        contractDict['closeDate'] = contract[10]
+        contractList.append(contractDict)
+    conn.close()
+    return jsonify(smartContracts=contractList, result='ok')
+
+
+@app.route('/api/v2/smartContractInfo', methods=['GET'])
+async def getContractInfo_v2():
+    contractName = request.args.get('contractName')
+    contractAddress = request.args.get('contractAddress')
+    
+    if contractName is None:
+        return jsonify(description='Smart Contract\'s name hasn\'t been passed'), 400
+    contractName = contractName.strip()
+    
+    if contractAddress is None:
+        return jsonify(description='Smart Contract\'s address hasn\'t been passed'), 400
+    contractAddress = contractAddress.strip()
+    if not check_flo_address(contractAddress, is_testnet):
+        return jsonify(description='contractAddress validation failed'), 400
+
+    contractStructure = fetchContractStructure(contractName, contractAddress)
+    if contractStructure:
+        returnval = contractStructure
+        # Categorize into what type of contract it is right now 
+        if contractStructure['contractType'] == 'continuos-event' and contractStructure['subtype'] == 'tokenswap':
+            conn, c = create_database_connection('smart_contract', {'contract_name': contractName, 'contract_address': contractAddress})
+            c.execute('select count(participantAddress), sum(tokenAmount), sum(winningAmount) from contractparticipants')
+            participation_details = c.fetchall()
+            returnval['numberOfParticipants'] = participation_details[0][0]
+            returnval['totalParticipationAmount'] = participation_details[0][1]
+            returnval['totalHonorAmount'] = participation_details[0][2]
+            c.execute('SELECT COUNT(DISTINCT transactionHash) FROM contractdeposits')
+            returnval['numberOfDeposits'] = c.fetchall()[0][0]
+
+        elif contractStructure['contractType'] == 'one-time-event' and 'exitconditions' in contractStructure.keys():
+            returnval['userChoice'] = contractStructure['exitconditions']
+            returnval.pop('exitconditions')
+            conn, c = create_database_connection('system_dbs')
+            c.execute('select status, incorporationDate, expiryDate, closeDate from activecontracts where contractName=="{}" and contractAddress=="{}"'.format(contractName.strip(), contractAddress.strip()))
+            results = c.fetchall()
+
+            if len(results) == 1:
+                for result in results:
+                    returnval['status'] = result[0]
+                    returnval['incorporationDate'] = result[1]
+                    if result[2]:
+                        returnval['expiryDate'] = result[2]
+                    if result[3]:
+                        returnval['closeDate'] = result[3]
+
+        elif contractStructure['contractType'] == 'one-time-event' and 'payeeAddress' in contractStructure.keys():
+            pass
+
+        return jsonify(contractName=contractName, contractAddress=contractAddress, contractInfo=returnval), 200
+    else:
+        return jsonify(details='Smart Contract with the given name doesn\'t exist'), 404
+
+
+@app.route('/api/v2/smartContractParticipants', methods=['GET'])
+async def getcontractparticipants_v2():
+    contractName = request.args.get('contractName')
+    contractName = contractName.strip()
+    if contractName is None:
+        return jsonify(description='Smart Contract\'s name hasn\'t been passed'), 400
+    
+    contractAddress = request.args.get('contractAddress')
+    contractAddress = contractAddress.strip()
+    if contractAddress is None:
+        return jsonify(description='Smart Contract\'s address hasn\'t been passed'), 400 
+    if not check_flo_address(contractAddress, is_testnet):
+        return jsonify(description='contractAddress validation failed'), 400
+    
+    filelocation = os.path.join(dbfolder, 'smartContracts', '{}-{}.db'.format(contractName, contractAddress))
+    if os.path.isfile(filelocation):
+        # Make db connection and fetch data
+        contractStructure = fetchContractStructure(contractName, contractAddress)
+        contractStatus = fetchContractStatus(contractName, contractAddress)
+        conn, c = create_database_connection('smart_contract', {'contract_name': contractName, 'contract_address': contractAddress})        
+        if 'exitconditions' in contractStructure:
+            # contract is of the type external trigger
+            # check if the contract has been closed
+            if contractStatus == 'closed':
+                token = contractStructure['tokenIdentification']
+                c.execute('SELECT id, participantAddress, tokenAmount, userChoice, transactionHash, winningAmount FROM contractparticipants')
+                result = c.fetchall()
+                returnval = {}
+                for row in result:
+                    returnval[row[1]] = {'participantFloAddress': row[1], 'tokenAmount': row[2], 'userChoice': row[3], 'transactionHash': row[4], 'winningAmount': row[5], 'tokenIdentification': token}
+
+            else:
+                c.execute('SELECT id, participantAddress, tokenAmount, userChoice, transactionHash FROM contractparticipants')
+                result = c.fetchall()
+                conn.close()
+                returnval = {}
+                for row in result:
+                    returnval[row[1]] = {'participantFloAddress': row[1], 'tokenAmount': row[2], 'userChoice': row[3], 'transactionHash': row[4]}
+
+        elif 'payeeAddress' in contractStructure:
+            # contract is of the type internal trigger
+            c.execute('SELECT id, participantAddress, tokenAmount, userChoice, transactionHash FROM contractparticipants')
+            result = c.fetchall()
+            conn.close()
+            returnval = {}
+            for row in result:
+                returnval[row[1]] = {'participantFloAddress': row[1], 'tokenAmount': row[2], 'transactionHash': row[4]}
+
+        elif contractStructure['contractType'] == 'continuos-event' and contractStructure['subtype'] == 'tokenswap':
+            c.execute('SELECT * FROM contractparticipants')
+            contract_participants = c.fetchall()
+            returnval = {}
+            for row in contract_participants:
+                returnval[row[1]] = {
+                                        'participantFloAddress': row[1], 
+                                        'participationAmount': row[2], 
+                                        'swapPrice': float(row[3]),
+                                        'transactionHash': row[4],
+                                        'blockNumber': row[5],
+                                        'blockHash': row[6],
+                                        'swapAmount': row[7]
+                                    }
+            conn.close()
+        
+        return jsonify(contractName=contractName, contractAddress=contractAddress, participantInfo=returnval), 200
+    else:
+        return jsonify(description='Smart Contract with the given name doesn\'t exist'), 404
+
+
 @app.route('/api/v2/participantDetails/<floAddress>', methods=['GET'])
 async def participantDetails():
     if floAddress is None:
         return jsonify(description='FLO address hasn\'t been passed'), 400
+    if not check_flo_address(floAddress, is_testnet):
+        return jsonify(description='floAddress validation failed'), 400
+    
     contractName = request.args.get('contractName')
+    contractName = contractName.strip()
+    
     contractAddress = request.args.get('contractAddress')
-
-    dblocation = os.path.join(dbfolder, 'system.db')
+    contractAddress = contractAddress.strip()
+    if contractAddress is not None and not check_flo_address(contractAddress, is_testnet):
+        return jsonify(description='contractAddress validation failed'), 400
 
     if (contractName and contractAddress is None) or (contractName is None and contractAddress):
         return jsonify(description='pass both, contractName and contractAddress as url parameters'), 400
 
-    #if os.path.isfile(dblocation) and os.path.isfile(contract_db):
+    dblocation = os.path.join(dbfolder, 'system.db')
     if os.path.isfile(dblocation):
         # Make db connection and fetch data
         conn = sqlite3.connect(dblocation)
@@ -1615,49 +1910,19 @@ async def participantDetails():
         return jsonify(description='System error. System db is missing'), 404
 
 
-@app.route('/api/v1.0/getSmartContractTransactions', methods=['GET'])
-async def getsmartcontracttransactions():
-    contractName = request.args.get('contractName')
-    contractAddress = request.args.get('contractAddress')
-
-    if contractName is None:
-        return jsonify(result='error', description='Smart Contract\'s name hasn\'t been passed')
-
-    if contractAddress is None:
-        return jsonify(result='error', description='Smart Contract\'s address hasn\'t been passed')
-
-    contractDbName = '{}-{}.db'.format(contractName.strip(), contractAddress.strip())
-    filelocation = os.path.join(dbfolder, 'smartContracts', contractDbName)
-
-    if os.path.isfile(filelocation):
-        # Make db connection and fetch data
-        conn = sqlite3.connect(filelocation)
-        c = conn.cursor()
-        c.execute('select jsonData, parsedFloData from contractTransactionHistory')
-        result = c.fetchall()
-        conn.close()
-        returnval = {}
-
-        for item in result:
-            temp = {}
-            temp['transactionDetails'] = json.loads(item[0])
-            temp['parsedFloData'] = json.loads(item[1])
-            returnval[temp['transactionDetails']['txid']] = temp
-
-        return jsonify(result='ok', contractName=contractName, contractAddress=contractAddress, contractTransactions=returnval)
-
-    else:
-        return jsonify(result='error', description='Smart Contract with the given name doesn\'t exist')
-
-
 @app.route('/api/v2/smartContractTransactions', methods=['GET'])
 async def smartcontracttransactions():
     contractName = request.args.get('contractName')
-    contractAddress = request.args.get('contractAddress')
+    contractName = contractName.strip()
     if contractName is None:
         return jsonify(description='Smart Contract\'s name hasn\'t been passed'), 400
+    
+    contractAddress = request.args.get('contractAddress')
+    contractAddress = contractAddress.strip()
     if contractAddress is None:
         return jsonify(description='Smart Contract\'s address hasn\'t been passed'), 400
+    if not check_flo_address(contractAddress, is_testnet):
+        return jsonify(description='contractAddress validation failed'), 400
 
     contractDbName = '{}-{}.db'.format(contractName.strip(), contractAddress.strip())
     filelocation = os.path.join(dbfolder, 'smartContracts', contractDbName)
@@ -1682,19 +1947,11 @@ async def smartcontracttransactions():
         return jsonify(description='Smart Contract with the given name doesn\'t exist'), 404
 
 
-@app.route('/api/v1.0/getBlockDetails/<blockdetail>', methods=['GET'])
-async def getblockdetails(blockdetail):
-    blockJson = blockdetailhelper(blockdetail)
-    if len(blockJson) != 0:
-        blockJson = json.loads(blockJson[0][0])
-        return jsonify(result='ok', blockDetails=blockJson)
-    else:
-        return jsonify(result='error', description='Block doesn\'t exist in database')
+@app.route('/api/v2/blockDetails/<blockHash>', methods=['GET'])
+async def blockdetails(blockHash):
+    # todo - validate blockHash
 
-
-@app.route('/api/v2/blockDetails/<blockdetail>', methods=['GET'])
-async def blockdetails(blockdetail):
-    blockJson = blockdetailhelper(blockdetail)
+    blockJson = blockdetailhelper(blockHash)
     if len(blockJson) != 0:
         blockJson = json.loads(blockJson[0][0])
         return jsonify(blockDetails=blockJson), 200
@@ -1702,22 +1959,10 @@ async def blockdetails(blockdetail):
         return jsonify(description='Block doesn\'t exist in database'), 404
 
 
-@app.route('/api/v1.0/getTransactionDetails/<transactionHash>', methods=['GET'])
-async def gettransactiondetails(transactionHash):
-
-    transactionJsonData = transactiondetailhelper(transactionHash)
-
-    if len(transactionJsonData) != 0:
-        transactionJson = json.loads(transactionJsonData[0][0])
-        parseResult = json.loads(transactionJsonData[0][1])
-
-        return jsonify(parsedFloData=parseResult, transactionDetails=transactionJson, transactionHash=transactionHash, result='ok')
-    else:
-        return jsonify(result='error', description='Transaction doesn\'t exist in database')
-
-
 @app.route('/api/v2/transactionDetails/<transactionHash>', methods=['GET'])
 async def transactiondetails1(transactionHash):
+    # todo - validate transactionHash
+
     transactionJsonData = transactiondetailhelper(transactionHash)
     if len(transactionJsonData) != 0:
         transactionJson = json.loads(transactionJsonData[0][0])
@@ -1795,49 +2040,11 @@ async def transactiondetails1(transactionHash):
         return jsonify(description='Transaction doesn\'t exist in database'), 404
 
 
-@app.route('/api/v1.0/getLatestTransactionDetails', methods=['GET'])
-async def getLatestTransactionDetails():
-    numberOfLatestBlocks = request.args.get('numberOfLatestBlocks')
-
-    dblocation = dbfolder + '/latestCache.db'
-    if os.path.exists(dblocation):
-        conn = sqlite3.connect(dblocation)
-        c = conn.cursor()
-    else:
-        return 'Latest transactions db doesn\'t exist. This is unusual, please report on https://github.com/ranchimall/ranchimallflo-api'
-
-    if numberOfLatestBlocks is not None:
-        c.execute('SELECT * FROM latestTransactions WHERE blockNumber IN (SELECT DISTINCT blockNumber FROM latestTransactions ORDER BY blockNumber DESC LIMIT {}) ORDER BY id ASC;'.format(int(numberOfLatestBlocks)))
-        latestTransactions = c.fetchall()
-        c.close()
-        tempdict = {}
-        for idx, item in enumerate(latestTransactions):
-            item = list(item)
-            tx_parsed_details = {}
-            tx_parsed_details['transactionDetails'] = json.loads(item[3])
-            tx_parsed_details['parsedFloData'] = json.loads(item[5])
-            tx_parsed_details['parsedFloData']['transactionType'] = item[4]
-            tx_parsed_details['transactionDetails']['blockheight'] = int(item[2])
-            tempdict[json.loads(item[3])['txid']] = tx_parsed_details
-    else:
-        c.execute('''SELECT * FROM latestTransactions WHERE blockNumber IN (SELECT DISTINCT blockNumber FROM latestTransactions ORDER BY blockNumber DESC LIMIT 100) ORDER BY id ASC;''')
-        latestTransactions = c.fetchall()
-        c.close()
-        tempdict = {}
-        for idx, item in enumerate(latestTransactions):
-            item = list(item)
-            tx_parsed_details = {}
-            tx_parsed_details['transactionDetails'] = json.loads(item[3])
-            tx_parsed_details['parsedFloData'] = json.loads(item[5])
-            tx_parsed_details['parsedFloData']['transactionType'] = item[4]
-            tx_parsed_details['transactionDetails']['blockheight'] = int(item[2])
-            tempdict[json.loads(item[3])['txid']] = tx_parsed_details
-    return jsonify(result='ok', latestTransactions=tempdict)
-
-
 @app.route('/api/v2/latestTransactionDetails', methods=['GET'])
 async def latestTransactionDetails():
     numberOfLatestBlocks = request.args.get('numberOfLatestBlocks')
+    if numberOfLatestBlocks is not None and not check_integer(numberOfLatestBlocks):
+        return jsonify(description='numberOfLatestBlocks validation failed'), 400
 
     dblocation = dbfolder + '/latestCache.db'
     if os.path.exists(dblocation):
@@ -1875,33 +2082,12 @@ async def latestTransactionDetails():
     return jsonify(latestTransactions=tempdict), 200
 
 
-@app.route('/api/v1.0/getLatestBlockDetails', methods=['GET'])
-async def getLatestBlockDetails():
-    limit = request.args.get('limit')
-
-    dblocation = dbfolder + '/latestCache.db'
-    if os.path.exists(dblocation):
-        conn = sqlite3.connect(dblocation)
-        c = conn.cursor()
-    else:
-        return 'Latest transactions db doesn\'t exist. This is unusual, please report on https://github.com/ranchimall/ranchimallflo-api'
-
-    if limit is None:
-        c.execute('''SELECT * FROM ( SELECT * FROM latestBlocks ORDER BY blockNumber DESC LIMIT 4) ORDER BY id ASC;''')
-    else:
-        int(limit)
-        c.execute('SELECT * FROM ( SELECT * FROM latestBlocks ORDER BY blockNumber DESC LIMIT {}) ORDER BY id ASC;'.format(limit))
-    latestBlocks = c.fetchall()
-    c.close()
-    tempdict = {}
-    for idx, item in enumerate(latestBlocks):
-        tempdict[json.loads(item[3])['hash']] = json.loads(item[3])
-    return jsonify(result='ok', latestBlocks=tempdict)
-
-
 @app.route('/api/v2/latestBlockDetails', methods=['GET'])
 async def latestBlockDetails():
     limit = request.args.get('limit')
+    if limit is not None and not check_integer(limit):
+        return jsonify(description='limit validation failed'), 400
+
     dblocation = dbfolder + '/latestCache.db'
     if os.path.exists(dblocation):
         conn = sqlite3.connect(dblocation)
@@ -1921,9 +2107,9 @@ async def latestBlockDetails():
     return jsonify(result='ok', latestBlocks=tempdict)
 
 
-@app.route('/api/v1.0/getBlockTransactions/<blockdetail>', methods=['GET'])
-async def getblocktransactions(blockdetail):
-    blockJson = blockdetailhelper(blockdetail)
+@app.route('/api/v2/blockTransactions/<blockHash>', methods=['GET'])
+async def blocktransactions(blockHash):
+    blockJson = blockdetailhelper(blockHash)
     if len(blockJson) != 0:
         blockJson = json.loads(blockJson[0][0])
         blocktxlist = blockJson['tx']
@@ -1936,61 +2122,9 @@ async def getblocktransactions(blockdetail):
                 "parsedFloData" : parseResult,
                 "transactionDetails" : transactionJson
             }
-        return jsonify(result='ok', transactions=blocktxs, blockKeyword=blockdetail)
-    else:
-        return jsonify(result='error', description='Block doesn\'t exist in database')
-
-
-@app.route('/api/v2/blockTransactions/<blockdetail>', methods=['GET'])
-async def blocktransactions(blockdetail):
-    blockJson = blockdetailhelper(blockdetail)
-    if len(blockJson) != 0:
-        blockJson = json.loads(blockJson[0][0])
-        blocktxlist = blockJson['tx']
-        blocktxs = {}
-        for i in range(len(blocktxlist)):
-            temptx = transactiondetailhelper(blocktxlist[i])                        
-            transactionJson = json.loads(temptx[0][0])
-            parseResult = json.loads(temptx[0][1])
-            blocktxs[blocktxlist[i]] = {
-                "parsedFloData" : parseResult,
-                "transactionDetails" : transactionJson
-            }
-        return jsonify(transactions=blocktxs, blockKeyword=blockdetail), 200
+        return jsonify(transactions=blocktxs, blockKeyword=blockHash), 200
     else:
         return jsonify(description='Block doesn\'t exist in database'), 404
-
-
-@app.route('/api/v1.0/categoriseString/<urlstring>')
-async def categoriseString(urlstring):
-    # check if the hash is of a transaction
-    response = requests.get('{}tx/{}'.format(apiUrl, urlstring))
-    if response.status_code == 200:
-        return jsonify(type='transaction')
-    else:
-        response = requests.get('{}block/{}'.format(apiUrl, urlstring))
-        if response.status_code == 200:
-            return jsonify(type='block')
-        else:
-            # check urlstring is a token name
-            tokenfolder = os.path.join(dbfolder, 'tokens')
-            onlyfiles = [f[:-3]
-                         for f in os.listdir(tokenfolder) if os.path.isfile(os.path.join(tokenfolder, f))]
-
-            if urlstring.lower() in onlyfiles:
-                return jsonify(type='token')
-            else:
-                contractfolder = os.path.join(dbfolder, 'system.db')
-                conn = sqlite3.connect(contractfolder)
-                conn.row_factory = lambda cursor, row: row[0]
-                c = conn.cursor()
-                contractList = c.execute(
-                    'select contractname from activeContracts').fetchall()
-
-                if urlstring.lower() in contractList:
-                    return jsonify(type='smartContract')
-                else:
-                    return jsonify(type='noise')
 
 
 @app.route('/api/v2/categoriseString/<urlstring>')
@@ -2022,43 +2156,6 @@ async def categoriseString_v2(urlstring):
                     return jsonify(type='smartContract'), 200
                 else:
                     return jsonify(type='noise'), 200
-
-
-@app.route('/api/v1.0/getTokenSmartContractList', methods=['GET'])
-async def getTokenSmartContractList():
-    # list of tokens
-    filelist = []
-    for item in os.listdir(os.path.join(dbfolder, 'tokens')):
-        if os.path.isfile(os.path.join(dbfolder, 'tokens', item)):
-            filelist.append(item[:-3])
-
-    # list of smart contracts
-    conn = sqlite3.connect(os.path.join(dbfolder, 'system.db'))
-    c = conn.cursor()
-
-    contractList = []
-
-    c.execute('select * from activecontracts')
-    allcontractsDetailList = c.fetchall()
-    for idx, contract in enumerate(allcontractsDetailList):
-        contractDict = {}
-        contractDict['contractName'] = contract[1]
-        contractDict['contractAddress'] = contract[2]
-        contractDict['status'] = contract[3]
-        contractDict['tokenIdentification'] = contract[4]
-        contractDict['contractType'] = contract[5]
-        contractDict['transactionHash'] = contract[6]
-        contractDict['blockNumber'] = contract[7]
-        contractDict['blockHash'] = contract[8]
-        contractDict['incorporationDate'] = contract[9]
-        if contract[10]:
-            contractDict['expiryDate'] = contract[10]
-        if contract[11]:
-            contractDict['closeDate'] = contract[11]
-
-        contractList.append(contractDict)
-
-    return jsonify(tokens=filelist, smartContracts=contractList, result='ok')
 
 
 @app.route('/api/v2/tokenSmartContractList', methods=['GET'])
@@ -2099,7 +2196,6 @@ async def tokenSmartContractList():
 
 
 class ServerSentEvent:
-
     def __init__(
             self,
             data: str,
@@ -2123,7 +2219,6 @@ class ServerSentEvent:
             message = f"{message}\nretry: {self.retry}"
         message = f"{message}\r\n\r\n"
         return message.encode('utf-8')
-
 
 @app.route('/sse')
 async def sse():
@@ -2150,55 +2245,6 @@ async def sse():
     response.timeout = None
     return response
 
-
-''' Stuff required for getPrices endpoint '''
-def updatePrices():
-    prices = {}
-    # USD -> INR
-    response = requests.get(f"https://api.exchangerate-api.com/v4/latest/usd")
-    price = response.json()
-    prices['USDINR'] = price['rates']['INR']
-
-    # Blockchain stuff : BTC,FLO -> USD,INR
-    # BTC->USD | BTC->INR
-    response = requests.get(f"https://api.coingecko.com/api/v3/simple/price?ids=bitcoin,flo&vs_currencies=usd,inr")
-    price = response.json()
-    prices['BTCUSD'] = price['bitcoin']['usd']
-    prices['BTCINR'] = price['bitcoin']['inr']
-
-    # FLO->USD | FLO->INR
-    response = requests.get(f"https://api.coinlore.net/api/ticker/?id=67")
-    price = response.json()
-    prices["FLOUSD"] = float(price[0]['price_usd'])
-    prices["FLOINR"] = float(prices["FLOUSD"]) * float(prices['USDINR'])
-
-    # 3. update latest price data
-    print('Prices updated at time: %s' % datetime.now())
-    print(prices)
-
-    conn = sqlite3.connect('system.db')
-    c = conn.cursor()
-    for pair in list(prices.items()):
-        pair = list(pair)
-        c.execute(f"UPDATE ratepairs SET price={pair[1]} WHERE ratepair='{pair[0]}'")
-    conn.commit()
-
-@app.route('/api/v1.0/getPrices', methods=['GET'])
-async def getPriceData():
-    # read system.db for price data
-    conn = sqlite3.connect('system.db')
-    c = conn.cursor()
-    ratepairs = c.execute('select ratepair, price from ratepairs')
-    ratepairs = ratepairs.fetchall()
-    prices = {}
-
-    for ratepair in ratepairs:
-        ratepair = list(ratepair)
-        prices[ratepair[0]] = ratepair[1]
-
-    return jsonify(prices=prices, result='ok')
-
-
 @app.route('/api/v2/prices', methods=['GET'])
 async def priceData():
     # read system.db for price data
@@ -2213,6 +2259,10 @@ async def priceData():
         prices[ratepair[0]] = ratepair[1]
 
     return jsonify(prices=prices), 200
+
+
+#######################
+#######################
 
 
 # if system.db isn't present, initialize it
