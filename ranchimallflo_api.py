@@ -10,14 +10,13 @@ from quart import jsonify, make_response, Quart, render_template, request, flash
 from quart_cors import cors
 import asyncio
 from typing import Optional
-
 from config import *
 import parsing
 import subprocess
-
 from apscheduler.schedulers.background import BackgroundScheduler
 import atexit
 import pyflo
+from operator import itemgetter
 import pdb
 
 
@@ -324,24 +323,24 @@ async def getTokenTransactions():
 
     if senderFloAddress and not destFloAddress:
         if limit is None:
-            c.execute('SELECT jsonData, parsedFloData FROM transactionHistory WHERE sourceFloAddress="{}" ORDER BY id DESC LIMIT 100'.format(senderFloAddress))
+            c.execute('SELECT jsonData, parsedFloData FROM transactionHistory WHERE sourceFloAddress="{}" ORDER BY id DESC'.format(senderFloAddress))
         else:
             c.execute('SELECT jsonData, parsedFloData FROM transactionHistory WHERE sourceFloAddress="{}" ORDER BY id DESC LIMIT {}'.format(senderFloAddress, limit))
     elif not senderFloAddress and destFloAddress:
         if limit is None:
-            c.execute('SELECT jsonData, parsedFloData FROM transactionHistory WHERE destFloAddress="{}" ORDER BY id DESC LIMIT 100'.format(destFloAddress))
+            c.execute('SELECT jsonData, parsedFloData FROM transactionHistory WHERE destFloAddress="{}" ORDER BY id DESC'.format(destFloAddress))
         else:
             c.execute('SELECT jsonData, parsedFloData FROM transactionHistory WHERE destFloAddress="{}" ORDER BY id DESC LIMIT {}'.format(destFloAddress, limit))
     elif senderFloAddress and destFloAddress:
         if limit is None:
-            c.execute('SELECT jsonData, parsedFloData FROM transactionHistory WHERE sourceFloAddress="{}" AND destFloAddress="{}" ORDER BY id DESC LIMIT 100'.format(senderFloAddress, destFloAddress))
+            c.execute('SELECT jsonData, parsedFloData FROM transactionHistory WHERE sourceFloAddress="{}" AND destFloAddress="{}" ORDER BY id DESC'.format(senderFloAddress, destFloAddress))
         else:
             c.execute('SELECT jsonData, parsedFloData FROM transactionHistory WHERE sourceFloAddress="{}" AND destFloAddress="{}" ORDER BY id DESC LIMIT {}'.format(senderFloAddress, destFloAddress, limit))
 
     else:
         if limit is None:
             c.execute(
-                'SELECT jsonData, parsedFloData FROM transactionHistory ORDER BY id DESC LIMIT 100')
+                'SELECT jsonData, parsedFloData FROM transactionHistory ORDER BY id DESC')
         else:
             c.execute(
                 'SELECT jsonData, parsedFloData FROM transactionHistory ORDER BY id DESC LIMIT {}'.format(limit))
@@ -527,11 +526,9 @@ async def getFloAddressTransactions():
                 conn = sqlite3.connect(dblocation)
                 c = conn.cursor()
                 if limit is None:
-                    c.execute('SELECT jsonData, parsedFloData FROM transactionHistory WHERE sourceFloAddress="{}" OR destFloAddress="{}" ORDER BY id DESC LIMIT 100'.format(
-                        floAddress, floAddress))
+                    c.execute('SELECT jsonData, parsedFloData FROM transactionHistory WHERE sourceFloAddress="{}" OR destFloAddress="{}" ORDER BY id DESC'.format(floAddress, floAddress))
                 else:
-                    c.execute('SELECT jsonData, parsedFloData FROM transactionHistory WHERE sourceFloAddress="{}" OR destFloAddress="{}" ORDER BY id DESC LIMIT {}'.format(
-                        floAddress, floAddress, limit))
+                    c.execute('SELECT jsonData, parsedFloData FROM transactionHistory WHERE sourceFloAddress="{}" OR destFloAddress="{}" ORDER BY id DESC LIMIT {}'.format(floAddress, floAddress, limit))
                 transactionJsonData = c.fetchall()
                 conn.close()
 
@@ -726,8 +723,7 @@ async def getContractInfo():
                             # this is a normal trigger
 
                             # find the winning condition
-                            c.execute(
-                                'select userchoice from contractparticipants where winningAmount is not null limit 1')
+                            c.execute('select userchoice from contractparticipants where winningAmount is not null limit 1')
                             returnval['winningChoice'] = c.fetchall()[0][0]
                             # find the winning participants
                             c.execute(
@@ -1111,7 +1107,7 @@ async def getLatestTransactionDetails():
             tx_parsed_details['transactionDetails']['blockheight'] = int(item[2])
             tempdict[json.loads(item[3])['txid']] = tx_parsed_details
     else:
-        c.execute('''SELECT * FROM latestTransactions WHERE blockNumber IN (SELECT DISTINCT blockNumber FROM latestTransactions ORDER BY blockNumber DESC LIMIT 100) ORDER BY id ASC;''')
+        c.execute('''SELECT * FROM latestTransactions WHERE blockNumber IN (SELECT DISTINCT blockNumber FROM latestTransactions ORDER BY blockNumber DESC) ORDER BY id ASC;''')
         latestTransactions = c.fetchall()
         c.close()
         tempdict = {}
@@ -1248,17 +1244,17 @@ async def info():
     # query for the number of flo addresses in tokenAddress mapping
     conn = sqlite3.connect(os.path.join(dbfolder, 'system.db'))
     c = conn.cursor()
-    tokenAddressCount = c.execute('select count(distinct tokenAddress) from tokenAddressMapping').fetchall()[0][0]
-    tokenCount = c.execute('select count(distinct token) from tokenAddressMapping').fetchall()[0][0]
-    contractCount = c.execute('select count(distinct contractName) from contractAddressMapping').fetchall()[0][0]
-    lastscannedblock = int(c.execute("select value from systemData where attribute=='lastblockscanned'").fetchall()[0][0])
+    tokenAddressCount = c.execute('SELECT COUNT(distinct tokenAddress) FROM tokenAddressMapping').fetchall()[0][0]
+    tokenCount = c.execute('SELECT COUNT(distinct token) FROM tokenAddressMapping').fetchall()[0][0]
+    contractCount = c.execute('SELECT COUNT(distinct contractName) FROM contractAddressMapping').fetchall()[0][0]
+    lastscannedblock = int(c.execute("SELECT value FROM systemData WHERE attribute=='lastblockscanned'").fetchall()[0][0])
     conn.close()
 
     # query for total number of validated blocks
     conn = sqlite3.connect(os.path.join(dbfolder, 'latestCache.db'))
     c = conn.cursor()
-    validatedBlockCount = c.execute('select count(distinct blockNumber) from latestBlocks').fetchall()[0][0]
-    validatedTransactionCount = c.execute('select count(distinct transactionHash) from latestTransactions').fetchall()[0][0]
+    validatedBlockCount = c.execute('SELECT COUNT(distinct blockNumber) FROM latestBlocks').fetchall()[0][0]
+    validatedTransactionCount = c.execute('SELECT COUNT(distinct transactionHash) FROM latestTransactions').fetchall()[0][0]
     conn.close()
 
     return jsonify(systemAddressCount=tokenAddressCount, systemBlockCount=validatedBlockCount, systemTransactionCount=validatedTransactionCount, systemSmartContractCount=contractCount, systemTokenCount=tokenCount, lastscannedblock=lastscannedblock), 200
@@ -1284,7 +1280,7 @@ async def tokenList():
 @app.route('/api/v2/tokenInfo/<token>', methods=['GET'])
 async def tokenInfo(token):
     if token is None:
-        return jsonify(description='token name hasnt been passed'), 400
+        return jsonify(description='Token name hasnt been passed'), 400
 
     # todo : input validation
 
@@ -1293,14 +1289,14 @@ async def tokenInfo(token):
         conn = sqlite3.connect(dblocation)
         c = conn.cursor()
     else:
-        return jsonify(description='token doesn\'t exist'), 404
+        return jsonify(description="Token doesn't exist"), 404
     c.execute('SELECT * FROM transactionHistory WHERE id=1')
     incorporationRow = c.fetchall()[0]
     c.execute('SELECT COUNT (DISTINCT address) FROM activeTable')
     numberOf_distinctAddresses = c.fetchall()[0][0]
-    c.execute('select max(id) from transactionHistory')
+    c.execute('SELECT MAX(id) FROM transactionHistory')
     numberOf_transactions = c.fetchall()[0][0]
-    c.execute('select contractName, contractAddress, blockNumber, blockHash, transactionHash from tokenContractAssociation')
+    c.execute('SELECT contractName, contractAddress, blockNumber, blockHash, transactionHash FROM tokenContractAssociation')
     associatedContracts = c.fetchall()
     conn.close()
 
@@ -1321,7 +1317,7 @@ async def tokenInfo(token):
 @app.route('/api/v2/tokenTransactions/<token>', methods=['GET'])
 async def tokenTransactions(token):
     if token is None:
-        return jsonify(description='token name hasnt been passed'), 400 
+        return jsonify(description='Token name hasnt been passed'), 400 
 
     # Input validations
     senderFloAddress = request.args.get('senderFloAddress')
@@ -1340,51 +1336,52 @@ async def tokenTransactions(token):
         conn.row_factory = sqlite3.Row
         c = conn.cursor()
     else:
-        return jsonify(description='token doesn\'t exist'), 404
+        return jsonify(description="Token doesn't exist"), 404
 
     if senderFloAddress and not destFloAddress:
         if limit is None:
-            c.execute('SELECT jsonData, parsedFloData FROM transactionHistory WHERE sourceFloAddress="{}" ORDER BY id DESC LIMIT 100'.format(senderFloAddress))
+            c.execute('SELECT jsonData, parsedFloData, blocktime FROM transactionHistory WHERE sourceFloAddress="{}"'.format(senderFloAddress))
         else:
-            c.execute('SELECT jsonData, parsedFloData FROM transactionHistory WHERE sourceFloAddress="{}" ORDER BY id DESC LIMIT {}'.format(senderFloAddress, limit))
+            c.execute('SELECT jsonData, parsedFloData, blocktime FROM transactionHistory WHERE sourceFloAddress="{}" LIMIT {}'.format(senderFloAddress, limit))
     elif not senderFloAddress and destFloAddress:
         if limit is None:
-            c.execute('SELECT jsonData, parsedFloData FROM transactionHistory WHERE destFloAddress="{}" ORDER BY id DESC LIMIT 100'.format(destFloAddress))
+            c.execute('SELECT jsonData, parsedFloData, blocktime FROM transactionHistory WHERE destFloAddress="{}"'.format(destFloAddress))
         else:
-            c.execute('SELECT jsonData, parsedFloData FROM transactionHistory WHERE destFloAddress="{}" ORDER BY id DESC LIMIT {}'.format(destFloAddress, limit))
+            c.execute('SELECT jsonData, parsedFloData, blocktime FROM transactionHistory WHERE destFloAddress="{}" LIMIT {}'.format(destFloAddress, limit))
     elif senderFloAddress and destFloAddress:
         if limit is None:
-            c.execute('SELECT jsonData, parsedFloData FROM transactionHistory WHERE sourceFloAddress="{}" AND destFloAddress="{}" ORDER BY id DESC LIMIT 100'.format(senderFloAddress, destFloAddress))
+            c.execute('SELECT jsonData, parsedFloData, blocktime FROM transactionHistory WHERE sourceFloAddress="{}" AND destFloAddress="{}"'.format(senderFloAddress, destFloAddress))
         else:
-            c.execute('SELECT jsonData, parsedFloData FROM transactionHistory WHERE sourceFloAddress="{}" AND destFloAddress="{}" ORDER BY id DESC LIMIT {}'.format(senderFloAddress, destFloAddress, limit))
-
+            c.execute('SELECT jsonData, parsedFloData, blocktime FROM transactionHistory WHERE sourceFloAddress="{}" AND destFloAddress="{}" LIMIT {}'.format(senderFloAddress, destFloAddress, limit))
     else:
         if limit is None:
-            c.execute('SELECT jsonData, parsedFloData FROM transactionHistory ORDER BY id DESC LIMIT 100')
+            c.execute('SELECT jsonData, parsedFloData, blocktime FROM transactionHistory')
         else:
-            c.execute('SELECT jsonData, parsedFloData FROM transactionHistory ORDER BY id DESC LIMIT {}'.format(limit))
+            c.execute('SELECT jsonData, parsedFloData, blocktime FROM transactionHistory LIMIT {}'.format(limit))
     transactionJsonData = c.fetchall()
     conn.close()
-    rowarray_list = {}
-    for row in transactionJsonData:
+
+    rowarray_list = []
+    sorted_list = sorted(transactionJsonData, key=itemgetter('blocktime'), reverse=True)
+    for row in sorted_list:
         temp = {}
         temp['transactionDetails'] = json.loads(row[0])
         temp['parsedFloData'] = json.loads(row[1])
-        rowarray_list[temp['transactionDetails']['txid']] = temp
+        rowarray_list.append(temp)
     return jsonify(token=token, transactions=rowarray_list), 200
 
 
 @app.route('/api/v2/tokenBalances/<token>', methods=['GET'])
 async def tokenBalances(token):
     if token is None:
-        return jsonify(description='token name hasnt been passed'), 400
+        return jsonify(description='Token name hasnt been passed'), 400
 
     dblocation = dbfolder + '/tokens/' + str(token) + '.db'
     if os.path.exists(dblocation):
         conn = sqlite3.connect(dblocation)
         c = conn.cursor()
     else:
-        return jsonify(description='token doesn\'t exist'), 404
+        return jsonify(description="Token doesn't exist"), 404
     c.execute('SELECT address,SUM(transferBalance) FROM activeTable GROUP BY address')
     addressBalances = c.fetchall()
 
@@ -1490,7 +1487,7 @@ async def floAddressBalance(floAddress):
             conn = sqlite3.connect(dblocation)
             c = conn.cursor()
         else:
-            return jsonify(description="token doesn't exist"), 404
+            return jsonify(description="Token doesn't exist"), 404
         c.execute(f'SELECT SUM(transferBalance) FROM activeTable WHERE address="{floAddress}"')
         balance = c.fetchall()[0][0]
         conn.close()
@@ -1513,44 +1510,45 @@ async def floAddressTransactions(floAddress):
         if os.path.exists(dblocation):
             conn = sqlite3.connect(dblocation)
             c = conn.cursor()
-            c.execute('select token from tokenAddressMapping where tokenAddress="{}"'.format(floAddress))
+            c.execute('SELECT token FROM tokenAddressMapping WHERE tokenAddress="{}"'.format(floAddress))
             tokenNames = c.fetchall()
     else:
         dblocation = dbfolder + '/tokens/' + str(token) + '.db'
         if os.path.exists(dblocation):
             tokenNames = [[str(token), ]]
         else:
-            return jsonify(description='token doesn\'t exist'), 404
+            return jsonify(description="Token doesn't exist"), 404
 
     if len(tokenNames) != 0:
-        allTransactionList = {}
-
+        allTransactionList = []
         for tokenname in tokenNames:
             tokenname = tokenname[0]
             dblocation = dbfolder + '/tokens/' + str(tokenname) + '.db'
             if os.path.exists(dblocation):
-                tempdict = {}
                 conn = sqlite3.connect(dblocation)
+                conn.row_factory = sqlite3.Row
                 c = conn.cursor()
                 if limit is None:
-                    c.execute(f'SELECT jsonData, parsedFloData FROM transactionHistory WHERE sourceFloAddress="{floAddress}" OR destFloAddress="{floAddress}" ORDER BY id DESC LIMIT 100')
+                    c.execute(f'SELECT jsonData, parsedFloData, blocktime FROM transactionHistory WHERE sourceFloAddress="{floAddress}" OR destFloAddress="{floAddress}" ORDER BY blocktime DESC')
                 else:
-                    c.execute(f'SELECT jsonData, parsedFloData FROM transactionHistory WHERE sourceFloAddress="{floAddress}" OR destFloAddress="{floAddress}" ORDER BY id DESC LIMIT {limit}')
+                    c.execute(f'SELECT jsonData, parsedFloData, blocktime FROM transactionHistory WHERE sourceFloAddress="{floAddress}" OR destFloAddress="{floAddress}" ORDER BY blocktime DESC LIMIT {limit}')
                 transactionJsonData = c.fetchall()
                 conn.close()
-
-                for row in transactionJsonData:
-                    temp = {}
-                    temp['transactionDetails'] = json.loads(row[0])
-                    temp['parsedFloData'] = json.loads(row[1])
-                    allTransactionList[temp['transactionDetails']['txid']] = temp
-
+                allTransactionList = allTransactionList + transactionJsonData
+                
+        rowarray_list = []
+        allTransactionList = sorted(allTransactionList, key=itemgetter('blocktime'), reverse=True)
+        for row in allTransactionList:
+            tx = {}
+            tx['transactionDetails'] = json.loads(row[0])
+            tx['parsedFloData'] = json.loads(row[1])
+            rowarray_list.append(tx)
         if token is None:
-            return jsonify(floAddress=floAddress, transactions=allTransactionList), 200
+            return jsonify(floAddress=floAddress, transactions=rowarray_list), 200
         else:
-            return jsonify(floAddress=floAddress, transactions=allTransactionList, token=token), 200
+            return jsonify(floAddress=floAddress, transactions=rowarray_list, token=token), 200
     else:
-        return jsonify(floAddress=floAddress, transactions={}, token=token), 200
+        return jsonify(floAddress=floAddress, transactions=[], token=token), 200
 
 
 # SMART CONTRACT APIs
@@ -1580,7 +1578,7 @@ async def getContractList_v2():
         contractDict['closeDate'] = contract[10]
         contractList.append(contractDict)
     conn.close()
-    return jsonify(smartContracts=contractList, result='ok')
+    return jsonify(smartContracts=contractList), 200
 
 
 @app.route('/api/v2/smartContractInfo', methods=['GET'])
@@ -1604,7 +1602,7 @@ async def getContractInfo_v2():
         # Categorize into what type of contract it is right now 
         if contractStructure['contractType'] == 'continuos-event' and contractStructure['subtype'] == 'tokenswap':
             conn, c = create_database_connection('smart_contract', {'contract_name': contractName, 'contract_address': contractAddress})
-            c.execute('select count(participantAddress), sum(tokenAmount), sum(winningAmount) from contractparticipants')
+            c.execute('SELECT COUNT(participantAddress), SUM(tokenAmount), SUM(winningAmount) FROM contractparticipants')
             participation_details = c.fetchall()
             returnval['numberOfParticipants'] = participation_details[0][0]
             returnval['totalParticipationAmount'] = participation_details[0][1]
@@ -1616,7 +1614,7 @@ async def getContractInfo_v2():
             returnval['userChoice'] = contractStructure['exitconditions']
             returnval.pop('exitconditions')
             conn, c = create_database_connection('system_dbs')
-            c.execute('select status, incorporationDate, expiryDate, closeDate from activecontracts where contractName=="{}" and contractAddress=="{}"'.format(contractName.strip(), contractAddress.strip()))
+            c.execute('SELECT status, incorporationDate, expiryDate, closeDate FROM activecontracts WHERE contractName=="{}" AND contractAddress=="{}"'.format(contractName.strip(), contractAddress.strip()))
             results = c.fetchall()
 
             if len(results) == 1:
@@ -1633,7 +1631,7 @@ async def getContractInfo_v2():
 
         return jsonify(contractName=contractName, contractAddress=contractAddress, contractInfo=returnval), 200
     else:
-        return jsonify(details='Smart Contract with the given name doesn\'t exist'), 404
+        return jsonify(details="Smart Contract with the given name doesn't exist"), 404
 
 
 @app.route('/api/v2/smartContractParticipants', methods=['GET'])
@@ -1795,7 +1793,7 @@ async def participantDetails():
                     detailsDict['tokenAmount'] = contract[5]
                     detailsDict['transactionHash'] = contract[6]
 
-                    c.execute(f"select status, tokenIdentification, contractType, blockNumber, blockHash, incorporationDate, expiryDate, closeDate from activecontracts where contractName='{detailsDict['contractName']}' and contractAddress='{detailsDict['contractAddress']}'")
+                    c.execute(f"SELECT status, tokenIdentification, contractType, blockNumber, blockHash, incorporationDate, expiryDate, closeDate FROM activecontracts WHERE contractName='{detailsDict['contractName']}' AND contractAddress='{detailsDict['contractAddress']}'")
                     temp = c.fetchall()
                     detailsDict['status'] = temp[0][0]
                     detailsDict['tokenIdentification'] = temp[0][1]
@@ -1833,7 +1831,7 @@ async def participantDetails():
                         if 'payeeAddress' in contractStructure:
                             # contract is of the type external trigger
                             # check if the contract has been closed
-                            c.execute(f"SELECT tokenAmount FROM contractparticipants where participantAddress='{floAddress}'")
+                            c.execute(f"SELECT tokenAmount FROM contractparticipants WHERE participantAddress='{floAddress}'")
                             result = c.fetchall()
                             conn.close()
                             detailsDict['tokenAmount'] = result[0][0]
@@ -1848,7 +1846,7 @@ async def participantDetails():
                     detailsDict['tokenAmount'] = contract[5]
                     detailsDict['transactionHash'] = contract[6]
 
-                    c.execute(f"select status, tokenIdentification, contractType, blockNumber, blockHash, incorporationDate, expiryDate, closeDate from activecontracts where contractName='{detailsDict['contractName']}' and contractAddress='{detailsDict['contractAddress']}'")
+                    c.execute(f"SELECT status, tokenIdentification, contractType, blockNumber, blockHash, incorporationDate, expiryDate, closeDate FROM activecontracts WHERE contractName='{detailsDict['contractName']}' AND contractAddress='{detailsDict['contractAddress']}'")
                     temp = c.fetchall()
                     detailsDict['status'] = temp[0][0]
                     detailsDict['tokenIdentification'] = temp[0][1]
@@ -1886,28 +1884,27 @@ async def participantDetails():
                         if 'exitconditions' in contractStructure:
                             # contract is of the type external trigger
                             # check if the contract has been closed
-                            c.execute('select * from contractTransactionHistory where transactionType="trigger"')
+                            c.execute('SELECT * FROM contractTransactionHistory WHERE transactionType="trigger"')
                             trigger = c.fetchall()
 
                             if detailsDict['status'] == 'closed':
-                                c.execute(f"SELECT userChoice, winningAmount FROM contractparticipants where participantAddress='{floAddress}'")
+                                c.execute(f"SELECT userChoice, winningAmount FROM contractparticipants WHERE participantAddress='{floAddress}'")
                                 result = c.fetchall()
                                 conn.close()
                                 detailsDict['userChoice'] = result[0][0]
                                 detailsDict['winningAmount'] = result[0][1]
                             else:
-                                c.execute(f"SELECT userChoice FROM contractparticipants where participantAddress='{floAddress}'")
+                                c.execute(f"SELECT userChoice FROM contractparticipants WHERE participantAddress='{floAddress}'")
                                 result = c.fetchall()
                                 conn.close()
                                 detailsDict['userChoice'] = result[0][0]
-
                     participationDetailsList.append(detailsDict)
                         
             return jsonify(floAddress=floAddress, type='participant', participatedContracts=participationDetailsList), 200
         else:
             return jsonify(description="Address hasn't participated in any other contract"), 404
     else:
-        return jsonify(description='System error. System db is missing'), 404
+        return jsonify(description='System error. System.db is missing. This is unusual, please report on https://github.com/ranchimall/ranchimallflo-api'), 500
 
 
 @app.route('/api/v2/smartContractTransactions', methods=['GET'])
@@ -1924,6 +1921,10 @@ async def smartcontracttransactions():
     if not check_flo_address(contractAddress, is_testnet):
         return jsonify(description='contractAddress validation failed'), 400
 
+    limit = request.args.get('limit')
+    if limit is not None and not check_integer(limit):
+        return jsonify(description='limit validation failed'), 400
+
     contractDbName = '{}-{}.db'.format(contractName.strip(), contractAddress.strip())
     filelocation = os.path.join(dbfolder, 'smartContracts', contractDbName)
 
@@ -1931,16 +1932,18 @@ async def smartcontracttransactions():
         # Make db connection and fetch data
         conn = sqlite3.connect(filelocation)
         c = conn.cursor()
-        c.execute('select jsonData, parsedFloData from contractTransactionHistory')
+        if limit is None:
+            c.execute('SELECT jsonData, parsedFloData FROM contractTransactionHistory ORDER BY blocktime DESC')
+        else:
+            c.execute(f'SELECT jsonData, parsedFloData FROM contractTransactionHistory ORDER BY blocktime DESC LIMIT {limit}')
         result = c.fetchall()
         conn.close()
-        returnval = {}
-
+        returnval = []
         for item in result:
-            temp = {}
-            temp['transactionDetails'] = json.loads(item[0])
-            temp['parsedFloData'] = json.loads(item[1])
-            returnval[temp['transactionDetails']['txid']] = temp
+            tx = {}
+            tx['transactionDetails'] = json.loads(item[0])
+            tx['parsedFloData'] = json.loads(item[1])
+            returnval.append(tx)
 
         return jsonify(contractName=contractName, contractAddress=contractAddress, contractTransactions=returnval), 200
     else:
@@ -1972,7 +1975,6 @@ async def transactiondetails1(transactionHash):
         sender_address, receiver_address = extract_ip_op_addresses(transactionJson)
 
         operationDetails = {}
-
         if operation == 'smartContractDeposit':
             # open the db reference and check if there is a deposit return 
             conn = sqlite3.connect(f"{dbfolder}/smartContracts/{db_reference}.db")
@@ -2055,31 +2057,20 @@ async def latestTransactionDetails():
 
     if numberOfLatestBlocks is not None:
         c.execute('SELECT * FROM latestTransactions WHERE blockNumber IN (SELECT DISTINCT blockNumber FROM latestTransactions ORDER BY blockNumber DESC LIMIT {}) ORDER BY id ASC;'.format(int(numberOfLatestBlocks)))
-        latestTransactions = c.fetchall()
-        c.close()
-        tempdict = {}
-        for idx, item in enumerate(latestTransactions):
-            item = list(item)
-            tx_parsed_details = {}
-            tx_parsed_details['transactionDetails'] = json.loads(item[3])
-            tx_parsed_details['parsedFloData'] = json.loads(item[5])
-            tx_parsed_details['parsedFloData']['transactionType'] = item[4]
-            tx_parsed_details['transactionDetails']['blockheight'] = int(item[2])
-            tempdict[json.loads(item[3])['txid']] = tx_parsed_details
     else:
-        c.execute('''SELECT * FROM latestTransactions WHERE blockNumber IN (SELECT DISTINCT blockNumber FROM latestTransactions ORDER BY blockNumber DESC LIMIT 100) ORDER BY id ASC;''')
-        latestTransactions = c.fetchall()
-        c.close()
-        tempdict = {}
-        for idx, item in enumerate(latestTransactions):
-            item = list(item)
-            tx_parsed_details = {}
-            tx_parsed_details['transactionDetails'] = json.loads(item[3])
-            tx_parsed_details['parsedFloData'] = json.loads(item[5])
-            tx_parsed_details['parsedFloData']['transactionType'] = item[4]
-            tx_parsed_details['transactionDetails']['blockheight'] = int(item[2])
-            tempdict[json.loads(item[3])['txid']] = tx_parsed_details
-    return jsonify(latestTransactions=tempdict), 200
+        c.execute('''SELECT * FROM latestTransactions WHERE blockNumber IN (SELECT DISTINCT blockNumber FROM latestTransactions ORDER BY blockNumber DESC) ORDER BY id ASC;''')
+    latestTransactions = c.fetchall()
+    c.close()
+    tx_list = []
+    for idx, item in enumerate(latestTransactions):
+        item = list(item)
+        tx_parsed_details = {}
+        tx_parsed_details['transactionDetails'] = json.loads(item[3])
+        tx_parsed_details['parsedFloData'] = json.loads(item[5])
+        tx_parsed_details['parsedFloData']['transactionType'] = item[4]
+        tx_parsed_details['transactionDetails']['blockheight'] = int(item[2])
+        tx_list.append(tx_parsed_details)
+    return jsonify(latestTransactions=tx_list), 200
 
 
 @app.route('/api/v2/latestBlockDetails', methods=['GET'])
