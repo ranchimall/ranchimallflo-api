@@ -1273,7 +1273,6 @@ async def tokenList():
     for item in os.listdir(os.path.join(dbfolder, 'tokens')):
         if os.path.isfile(os.path.join(dbfolder, 'tokens', item)):
             filelist.append(item[:-3])
-
     return jsonify(tokens=filelist), 200
 
 
@@ -1283,7 +1282,6 @@ async def tokenInfo(token):
         return jsonify(description='Token name hasnt been passed'), 400
 
     # todo : input validation
-
     dblocation = dbfolder + '/tokens/' + str(token) + '.db'
     if os.path.exists(dblocation):
         conn = sqlite3.connect(dblocation)
@@ -1534,8 +1532,7 @@ async def floAddressTransactions(floAddress):
                     c.execute(f'SELECT jsonData, parsedFloData, blocktime FROM transactionHistory WHERE sourceFloAddress="{floAddress}" OR destFloAddress="{floAddress}" ORDER BY blocktime DESC LIMIT {limit}')
                 transactionJsonData = c.fetchall()
                 conn.close()
-                allTransactionList = allTransactionList + transactionJsonData
-                
+                allTransactionList = allTransactionList + transactionJsonData 
         rowarray_list = []
         allTransactionList = sorted(allTransactionList, key=itemgetter('blocktime'), reverse=True)
         for row in allTransactionList:
@@ -1555,6 +1552,7 @@ async def floAddressTransactions(floAddress):
 @app.route('/api/v2/smartContractList', methods=['GET'])
 async def getContractList_v2():
     contractName = request.args.get('contractName')
+    contractName = contractName.strip().lower()
     contractAddress = request.args.get('contractAddress')
     # todo - Add validation for contractAddress and contractName to prevent SQL injection attacks
     if contractAddress is not None and not check_flo_address(contractAddress, is_testnet):
@@ -1588,7 +1586,7 @@ async def getContractInfo_v2():
     
     if contractName is None:
         return jsonify(description='Smart Contract\'s name hasn\'t been passed'), 400
-    contractName = contractName.strip()
+    contractName = contractName.strip().lower()
     
     if contractAddress is None:
         return jsonify(description='Smart Contract\'s address hasn\'t been passed'), 400
@@ -1637,9 +1635,9 @@ async def getContractInfo_v2():
 @app.route('/api/v2/smartContractParticipants', methods=['GET'])
 async def getcontractparticipants_v2():
     contractName = request.args.get('contractName')
-    contractName = contractName.strip()
     if contractName is None:
         return jsonify(description='Smart Contract\'s name hasn\'t been passed'), 400
+    contractName = contractName.strip().lower()
     
     contractAddress = request.args.get('contractAddress')
     contractAddress = contractAddress.strip()
@@ -1711,7 +1709,7 @@ async def participantDetails():
         return jsonify(description='floAddress validation failed'), 400
     
     contractName = request.args.get('contractName')
-    contractName = contractName.strip()
+    contractName = contractName.strip().lower()
     
     contractAddress = request.args.get('contractAddress')
     contractAddress = contractAddress.strip()
@@ -1910,7 +1908,7 @@ async def participantDetails():
 @app.route('/api/v2/smartContractTransactions', methods=['GET'])
 async def smartcontracttransactions():
     contractName = request.args.get('contractName')
-    contractName = contractName.strip()
+    contractName = contractName.strip().lower()
     if contractName is None:
         return jsonify(description='Smart Contract\'s name hasn\'t been passed'), 400
     
