@@ -4,4 +4,7 @@ __pycache__/
 config.py
 .idea/
 py3.7/
+py3/
 *.db
+*.code-workspace
+*.log
