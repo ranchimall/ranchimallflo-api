@@ -4,4 +4,5 @@ __pycache__/
 config.py
 .idea/
 py3.7/
+py3.7.0/
 *.db
