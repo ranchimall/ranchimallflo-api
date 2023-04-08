@@ -5,6 +5,7 @@ config.py
 .idea/
 py3.7/
 py3/
+py3.8/
 *.db
 *.code-workspace
 *.log
