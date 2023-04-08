@@ -2032,9 +2032,9 @@ async def latestTransactionDetails():
         return jsonify(description='Latest transactions db doesn\'t exist. This is unusual, please report on https://github.com/ranchimall/ranchimallflo-api'), 500
 
     if limit is not None:
-        c.execute('SELECT * FROM latestTransactions WHERE blockNumber IN (SELECT DISTINCT blockNumber FROM latestTransactions ORDER BY blockNumber DESC LIMIT {}) ORDER BY id ASC;'.format(int(limit)))
+        c.execute('SELECT * FROM latestTransactions WHERE blockNumber IN (SELECT DISTINCT blockNumber FROM latestTransactions ORDER BY blockNumber DESC LIMIT {}) ORDER BY id DESC;'.format(int(limit)))
     else:
-        c.execute('''SELECT * FROM latestTransactions WHERE blockNumber IN (SELECT DISTINCT blockNumber FROM latestTransactions ORDER BY blockNumber DESC) ORDER BY id ASC;''')
+        c.execute('''SELECT * FROM latestTransactions WHERE blockNumber IN (SELECT DISTINCT blockNumber FROM latestTransactions ORDER BY blockNumber DESC) ORDER BY id DESC;''')
     latestTransactions = c.fetchall()
     c.close()
     tx_list = []
@@ -2064,15 +2064,17 @@ async def latestBlockDetails():
         return jsonify(description='Latest transactions db doesn\'t exist. This is unusual, please report on https://github.com/ranchimall/ranchimallflo-api'), 404
 
     if limit is None:
-        c.execute('''SELECT * FROM ( SELECT * FROM latestBlocks ORDER BY blockNumber DESC LIMIT 4) ORDER BY id ASC;''')
+        c.execute('''SELECT jsonData FROM ( SELECT * FROM latestBlocks ORDER BY blockNumber DESC LIMIT 4) ORDER BY id DESC;''')
     else:
-        c.execute(f'SELECT * FROM ( SELECT * FROM latestBlocks ORDER BY blockNumber DESC LIMIT {limit}) ORDER BY id ASC;')
+        c.execute(f'SELECT jsonData FROM ( SELECT * FROM latestBlocks ORDER BY blockNumber DESC LIMIT {limit}) ORDER BY id DESC;')
     latestBlocks = c.fetchall()
     c.close()
-    tempdict = {}
+    
+    templst = []
     for idx, item in enumerate(latestBlocks):
-        tempdict[json.loads(item[3])['hash']] = json.loads(item[3])
-    return jsonify(result='ok', latestBlocks=tempdict)
+        templst.append(json.loads(item[0]))
+        
+    return jsonify(latestBlocks=templst), 200
 
 
 @app.route('/api/v2/blockTransactions/<blockHash>', methods=['GET'])
@@ -2252,4 +2254,4 @@ scheduler.start()
 atexit.register(lambda: scheduler.shutdown())
 
 if __name__ == "__main__":
-    app.run(debug=debug_status, host='0.0.0.0', port=5009)
+    app.run(debug=debug_status, host='0.0.0.0', port=5013)
