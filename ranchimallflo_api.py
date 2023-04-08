@@ -2020,9 +2020,9 @@ async def transactiondetails1(transactionHash):
 
 @app.route('/api/v2/latestTransactionDetails', methods=['GET'])
 async def latestTransactionDetails():
-    numberOfLatestBlocks = request.args.get('numberOfLatestBlocks')
-    if numberOfLatestBlocks is not None and not check_integer(numberOfLatestBlocks):
-        return jsonify(description='numberOfLatestBlocks validation failed'), 400
+    limit = request.args.get('limit')
+    if limit is not None and not check_integer(limit):
+        return jsonify(description='limit validation failed'), 400
 
     dblocation = dbfolder + '/latestCache.db'
     if os.path.exists(dblocation):
@@ -2031,8 +2031,8 @@ async def latestTransactionDetails():
     else:
         return jsonify(description='Latest transactions db doesn\'t exist. This is unusual, please report on https://github.com/ranchimall/ranchimallflo-api'), 500
 
-    if numberOfLatestBlocks is not None:
-        c.execute('SELECT * FROM latestTransactions WHERE blockNumber IN (SELECT DISTINCT blockNumber FROM latestTransactions ORDER BY blockNumber DESC LIMIT {}) ORDER BY id ASC;'.format(int(numberOfLatestBlocks)))
+    if limit is not None:
+        c.execute('SELECT * FROM latestTransactions WHERE blockNumber IN (SELECT DISTINCT blockNumber FROM latestTransactions ORDER BY blockNumber DESC LIMIT {}) ORDER BY id ASC;'.format(int(limit)))
     else:
         c.execute('''SELECT * FROM latestTransactions WHERE blockNumber IN (SELECT DISTINCT blockNumber FROM latestTransactions ORDER BY blockNumber DESC) ORDER BY id ASC;''')
     latestTransactions = c.fetchall()
