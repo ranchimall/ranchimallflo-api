@@ -1327,29 +1327,29 @@ async def tokenTransactions(token):
 
     if senderFloAddress and not destFloAddress:
         if limit is None:
-            c.execute('SELECT jsonData, parsedFloData, blocktime FROM transactionHistory WHERE sourceFloAddress="{}"'.format(senderFloAddress))
+            c.execute('SELECT jsonData, parsedFloData, time FROM transactionHistory WHERE sourceFloAddress="{}"'.format(senderFloAddress))
         else:
-            c.execute('SELECT jsonData, parsedFloData, blocktime FROM transactionHistory WHERE sourceFloAddress="{}" LIMIT {}'.format(senderFloAddress, limit))
+            c.execute('SELECT jsonData, parsedFloData, time FROM transactionHistory WHERE sourceFloAddress="{}" LIMIT {}'.format(senderFloAddress, limit))
     elif not senderFloAddress and destFloAddress:
         if limit is None:
-            c.execute('SELECT jsonData, parsedFloData, blocktime FROM transactionHistory WHERE destFloAddress="{}"'.format(destFloAddress))
+            c.execute('SELECT jsonData, parsedFloData, time FROM transactionHistory WHERE destFloAddress="{}"'.format(destFloAddress))
         else:
-            c.execute('SELECT jsonData, parsedFloData, blocktime FROM transactionHistory WHERE destFloAddress="{}" LIMIT {}'.format(destFloAddress, limit))
+            c.execute('SELECT jsonData, parsedFloData, time FROM transactionHistory WHERE destFloAddress="{}" LIMIT {}'.format(destFloAddress, limit))
     elif senderFloAddress and destFloAddress:
         if limit is None:
-            c.execute('SELECT jsonData, parsedFloData, blocktime FROM transactionHistory WHERE sourceFloAddress="{}" AND destFloAddress="{}"'.format(senderFloAddress, destFloAddress))
+            c.execute('SELECT jsonData, parsedFloData, time FROM transactionHistory WHERE sourceFloAddress="{}" AND destFloAddress="{}"'.format(senderFloAddress, destFloAddress))
         else:
-            c.execute('SELECT jsonData, parsedFloData, blocktime FROM transactionHistory WHERE sourceFloAddress="{}" AND destFloAddress="{}" LIMIT {}'.format(senderFloAddress, destFloAddress, limit))
+            c.execute('SELECT jsonData, parsedFloData, time FROM transactionHistory WHERE sourceFloAddress="{}" AND destFloAddress="{}" LIMIT {}'.format(senderFloAddress, destFloAddress, limit))
     else:
         if limit is None:
-            c.execute('SELECT jsonData, parsedFloData, blocktime FROM transactionHistory')
+            c.execute('SELECT jsonData, parsedFloData, time FROM transactionHistory')
         else:
-            c.execute('SELECT jsonData, parsedFloData, blocktime FROM transactionHistory LIMIT {}'.format(limit))
+            c.execute('SELECT jsonData, parsedFloData, time FROM transactionHistory LIMIT {}'.format(limit))
     transactionJsonData = c.fetchall()
     conn.close()
 
     rowarray_list = []
-    sorted_list = sorted(transactionJsonData, key=itemgetter('blocktime'), reverse=True)
+    sorted_list = sorted(transactionJsonData, key=itemgetter('time'), reverse=True)
     for row in sorted_list:
         transactions_object = {}
         transactions_object['transactionDetails'] = json.loads(row[0])
@@ -1516,14 +1516,14 @@ async def floAddressTransactions(floAddress):
                 conn.row_factory = sqlite3.Row
                 c = conn.cursor()
                 if limit is None:
-                    c.execute(f'SELECT jsonData, parsedFloData, blocktime FROM transactionHistory WHERE sourceFloAddress="{floAddress}" OR destFloAddress="{floAddress}" ORDER BY blocktime DESC')
+                    c.execute(f'SELECT jsonData, parsedFloData, time FROM transactionHistory WHERE sourceFloAddress="{floAddress}" OR destFloAddress="{floAddress}" ORDER BY time DESC')
                 else:
-                    c.execute(f'SELECT jsonData, parsedFloData, blocktime FROM transactionHistory WHERE sourceFloAddress="{floAddress}" OR destFloAddress="{floAddress}" ORDER BY blocktime DESC LIMIT {limit}')
+                    c.execute(f'SELECT jsonData, parsedFloData, time FROM transactionHistory WHERE sourceFloAddress="{floAddress}" OR destFloAddress="{floAddress}" ORDER BY time DESC LIMIT {limit}')
                 transactionJsonData = c.fetchall()
                 conn.close()
                 allTransactionList = allTransactionList + transactionJsonData 
         rowarray_list = []
-        allTransactionList = sorted(allTransactionList, key=itemgetter('blocktime'), reverse=True)
+        allTransactionList = sorted(allTransactionList, key=itemgetter('time'), reverse=True)
         for row in allTransactionList:
             tx = {}
             tx['transactionDetails'] = json.loads(row[0])
