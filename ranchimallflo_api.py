@@ -1552,7 +1552,6 @@ async def getContractList_v2():
         if not check_flo_address(contractAddress, is_testnet):
             return jsonify(description='contractAddress validation failed'), 400
     
-    
     contractList = []
     conn = sqlite3.connect(os.path.join(dbfolder, 'system.db'))
     c = conn.cursor()
@@ -1602,6 +1601,9 @@ async def getContractInfo_v2():
             returnval['totalHonorAmount'] = participation_details[0][2]
             c.execute('SELECT COUNT(DISTINCT transactionHash) FROM contractdeposits')
             returnval['numberOfDeposits'] = c.fetchall()[0][0]
+            # todo - add code to token tracker to save continuos event subtype KEY as contractSubtype as part of contractStructure and remove the following line
+            returnval['contractSubtype'] = 'tokenswap'
+            returnval['priceType'] = returnval['pricetype']
         elif contractStructure['contractType'] == 'one-time-event' and 'exitconditions' in contractStructure.keys():
             returnval['userChoice'] = contractStructure['exitconditions']
             returnval.pop('exitconditions')
@@ -1616,8 +1618,10 @@ async def getContractInfo_v2():
                         returnval['expiryDate'] = result[2]
                     if result[3]:
                         returnval['closeDate'] = result[3]
+            # todo - add code to token tracker to save one-time-event subtype as part of contractStructure and remove the following line
+            returnval['contractSubtype'] = 'external-trigger'
         elif contractStructure['contractType'] == 'one-time-event' and 'payeeAddress' in contractStructure.keys():
-            pass
+            returnval['contractSubtype'] = 'time-trigger'
 
         return jsonify(contractName=contractName, contractAddress=contractAddress, contractInfo=returnval), 200
     else:
@@ -1663,6 +1667,7 @@ async def getcontractparticipants_v2():
                 for row in result:
                     participation = {'participantFloAddress': row[1], 'tokenAmount': row[2], 'userChoice': row[3], 'transactionHash': row[4]}
                     returnval.append(participation)
+            return jsonify(contractName=contractName, contractAddress=contractAddress, contractType=contractStructure['contractType'], contractSubtype='external-trigger', participantInfo=returnval), 200
         elif 'payeeAddress' in contractStructure:
             # contract is of the type internal trigger
             c.execute('SELECT id, participantAddress, tokenAmount, userChoice, transactionHash FROM contractparticipants')
@@ -1672,6 +1677,7 @@ async def getcontractparticipants_v2():
             for row in result:
                 participation = {'participantFloAddress': row[1], 'tokenAmount': row[2], 'transactionHash': row[4]}
                 returnval.append(participation)
+            return jsonify(contractName=contractName, contractAddress=contractAddress, contractType=contractStructure['contractType'], contractSubtype='time-trigger', participantInfo=returnval), 200
         elif contractStructure['contractType'] == 'continuos-event' and contractStructure['subtype'] == 'tokenswap':
             c.execute('SELECT * FROM contractparticipants')
             contract_participants = c.fetchall()
@@ -1688,7 +1694,7 @@ async def getcontractparticipants_v2():
                                     }
                 returnval.append(participation)
             conn.close()
-        return jsonify(contractName=contractName, contractAddress=contractAddress, participantInfo=returnval), 200
+            return jsonify(contractName=contractName, contractAddress=contractAddress, contractType=contractStructure['contractType'], contractSubtype=contractStructure['subtype'], participantInfo=returnval), 200
     else:
         return jsonify(description='Smart Contract with the given name doesn\'t exist'), 404
 
@@ -2288,4 +2294,4 @@ scheduler.start()
 atexit.register(lambda: scheduler.shutdown())
 
 if __name__ == "__main__":
-    app.run(debug=debug_status, host='0.0.0.0', port=5013)
+    app.run(debug=debug_status, host='0.0.0.0', port=5009)
