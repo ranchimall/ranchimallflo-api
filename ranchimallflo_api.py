@@ -1542,11 +1542,16 @@ async def floAddressTransactions(floAddress):
 @app.route('/api/v2/smartContractList', methods=['GET'])
 async def getContractList_v2():
     contractName = request.args.get('contractName')
-    contractName = contractName.strip().lower()
-    contractAddress = request.args.get('contractAddress')
+    if contractName is not None:
+        contractName = contractName.strip().lower()
+
     # todo - Add validation for contractAddress and contractName to prevent SQL injection attacks
-    if contractAddress is not None and not check_flo_address(contractAddress, is_testnet):
-        return jsonify(description='contractAddress validation failed'), 400
+    contractAddress = request.args.get('contractAddress')
+    if contractAddress is not None:
+        contractAddress = contractAddress.strip()
+        if not check_flo_address(contractAddress, is_testnet):
+            return jsonify(description='contractAddress validation failed'), 400
+    
     
     contractList = []
     conn = sqlite3.connect(os.path.join(dbfolder, 'system.db'))
@@ -1646,30 +1651,33 @@ async def getcontractparticipants_v2():
                 token = contractStructure['tokenIdentification']
                 c.execute('SELECT id, participantAddress, tokenAmount, userChoice, transactionHash, winningAmount FROM contractparticipants')
                 result = c.fetchall()
-                returnval = {}
+                returnval = []
                 for row in result:
-                    returnval[row[1]] = {'participantFloAddress': row[1], 'tokenAmount': row[2], 'userChoice': row[3], 'transactionHash': row[4], 'winningAmount': row[5], 'tokenIdentification': token}
+                    participation = {'participantFloAddress': row[1], 'tokenAmount': row[2], 'userChoice': row[3], 'transactionHash': row[4], 'winningAmount': row[5], 'tokenIdentification': token}
+                    returnval.append(participation)
             else:
                 c.execute('SELECT id, participantAddress, tokenAmount, userChoice, transactionHash FROM contractparticipants')
                 result = c.fetchall()
                 conn.close()
-                returnval = {}
+                returnval = []
                 for row in result:
-                    returnval[row[1]] = {'participantFloAddress': row[1], 'tokenAmount': row[2], 'userChoice': row[3], 'transactionHash': row[4]}
+                    participation = {'participantFloAddress': row[1], 'tokenAmount': row[2], 'userChoice': row[3], 'transactionHash': row[4]}
+                    returnval.append(participation)
         elif 'payeeAddress' in contractStructure:
             # contract is of the type internal trigger
             c.execute('SELECT id, participantAddress, tokenAmount, userChoice, transactionHash FROM contractparticipants')
             result = c.fetchall()
             conn.close()
-            returnval = {}
+            returnval = []
             for row in result:
-                returnval[row[1]] = {'participantFloAddress': row[1], 'tokenAmount': row[2], 'transactionHash': row[4]}
+                participation = {'participantFloAddress': row[1], 'tokenAmount': row[2], 'transactionHash': row[4]}
+                returnval.append(participation)
         elif contractStructure['contractType'] == 'continuos-event' and contractStructure['subtype'] == 'tokenswap':
             c.execute('SELECT * FROM contractparticipants')
             contract_participants = c.fetchall()
-            returnval = {}
+            returnval = []
             for row in contract_participants:
-                returnval[row[1]] = {
+                participation = {
                                         'participantFloAddress': row[1], 
                                         'participationAmount': row[2], 
                                         'swapPrice': float(row[3]),
@@ -1678,6 +1686,7 @@ async def getcontractparticipants_v2():
                                         'blockHash': row[6],
                                         'swapAmount': row[7]
                                     }
+                returnval.append(participation)
             conn.close()
         return jsonify(contractName=contractName, contractAddress=contractAddress, participantInfo=returnval), 200
     else:
@@ -1923,6 +1932,31 @@ async def smartcontracttransactions():
             tx['parsedFloData'] = json.loads(item[1])
             returnval.append(tx)
         return jsonify(contractName=contractName, contractAddress=contractAddress, contractTransactions=returnval), 200
+    else:
+        return jsonify(description='Smart Contract with the given name doesn\'t exist'), 404
+
+
+@app.route('/api/v2/smartContractDeposits', methods=['GET'])
+async def smartcontractdeposits():
+    contractName = request.args.get('contractName')
+    if contractName is None:
+        return jsonify(description='Smart Contract\'s name hasn\'t been passed'), 400
+    contractName = contractName.strip().lower()
+    
+    contractAddress = request.args.get('contractAddress')
+    if contractAddress is None:
+        return jsonify(description='Smart Contract\'s address hasn\'t been passed'), 400
+    contractAddress = contractAddress.strip()
+    if not check_flo_address(contractAddress, is_testnet):
+        return jsonify(description='contractAddress validation failed'), 400
+    
+    contractDbName = '{}-{}.db'.format(contractName, contractAddress)
+    filelocation = os.path.join(dbfolder, 'smartContracts', contractDbName)
+
+    if os.path.isfile(filelocation):
+        # active deposits 
+        # 
+        return 'complete API'
     else:
         return jsonify(description='Smart Contract with the given name doesn\'t exist'), 404
 
