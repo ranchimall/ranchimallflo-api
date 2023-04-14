@@ -1327,29 +1327,29 @@ async def tokenTransactions(token):
 
     if senderFloAddress and not destFloAddress:
         if limit is None:
-            c.execute('SELECT jsonData, parsedFloData, blocktime FROM transactionHistory WHERE sourceFloAddress="{}"'.format(senderFloAddress))
+            c.execute('SELECT jsonData, parsedFloData, time FROM transactionHistory WHERE sourceFloAddress="{}"'.format(senderFloAddress))
         else:
-            c.execute('SELECT jsonData, parsedFloData, blocktime FROM transactionHistory WHERE sourceFloAddress="{}" LIMIT {}'.format(senderFloAddress, limit))
+            c.execute('SELECT jsonData, parsedFloData, time FROM transactionHistory WHERE sourceFloAddress="{}" LIMIT {}'.format(senderFloAddress, limit))
     elif not senderFloAddress and destFloAddress:
         if limit is None:
-            c.execute('SELECT jsonData, parsedFloData, blocktime FROM transactionHistory WHERE destFloAddress="{}"'.format(destFloAddress))
+            c.execute('SELECT jsonData, parsedFloData, time FROM transactionHistory WHERE destFloAddress="{}"'.format(destFloAddress))
         else:
-            c.execute('SELECT jsonData, parsedFloData, blocktime FROM transactionHistory WHERE destFloAddress="{}" LIMIT {}'.format(destFloAddress, limit))
+            c.execute('SELECT jsonData, parsedFloData, time FROM transactionHistory WHERE destFloAddress="{}" LIMIT {}'.format(destFloAddress, limit))
     elif senderFloAddress and destFloAddress:
         if limit is None:
-            c.execute('SELECT jsonData, parsedFloData, blocktime FROM transactionHistory WHERE sourceFloAddress="{}" AND destFloAddress="{}"'.format(senderFloAddress, destFloAddress))
+            c.execute('SELECT jsonData, parsedFloData, time FROM transactionHistory WHERE sourceFloAddress="{}" AND destFloAddress="{}"'.format(senderFloAddress, destFloAddress))
         else:
-            c.execute('SELECT jsonData, parsedFloData, blocktime FROM transactionHistory WHERE sourceFloAddress="{}" AND destFloAddress="{}" LIMIT {}'.format(senderFloAddress, destFloAddress, limit))
+            c.execute('SELECT jsonData, parsedFloData, time FROM transactionHistory WHERE sourceFloAddress="{}" AND destFloAddress="{}" LIMIT {}'.format(senderFloAddress, destFloAddress, limit))
     else:
         if limit is None:
-            c.execute('SELECT jsonData, parsedFloData, blocktime FROM transactionHistory')
+            c.execute('SELECT jsonData, parsedFloData, time FROM transactionHistory')
         else:
-            c.execute('SELECT jsonData, parsedFloData, blocktime FROM transactionHistory LIMIT {}'.format(limit))
+            c.execute('SELECT jsonData, parsedFloData, time FROM transactionHistory LIMIT {}'.format(limit))
     transactionJsonData = c.fetchall()
     conn.close()
 
     rowarray_list = []
-    sorted_list = sorted(transactionJsonData, key=itemgetter('blocktime'), reverse=True)
+    sorted_list = sorted(transactionJsonData, key=itemgetter('time'), reverse=True)
     for row in sorted_list:
         transactions_object = {}
         transactions_object['transactionDetails'] = json.loads(row[0])
@@ -1516,14 +1516,14 @@ async def floAddressTransactions(floAddress):
                 conn.row_factory = sqlite3.Row
                 c = conn.cursor()
                 if limit is None:
-                    c.execute(f'SELECT jsonData, parsedFloData, blocktime FROM transactionHistory WHERE sourceFloAddress="{floAddress}" OR destFloAddress="{floAddress}" ORDER BY blocktime DESC')
+                    c.execute(f'SELECT jsonData, parsedFloData, time FROM transactionHistory WHERE sourceFloAddress="{floAddress}" OR destFloAddress="{floAddress}" ORDER BY time DESC')
                 else:
-                    c.execute(f'SELECT jsonData, parsedFloData, blocktime FROM transactionHistory WHERE sourceFloAddress="{floAddress}" OR destFloAddress="{floAddress}" ORDER BY blocktime DESC LIMIT {limit}')
+                    c.execute(f'SELECT jsonData, parsedFloData, time FROM transactionHistory WHERE sourceFloAddress="{floAddress}" OR destFloAddress="{floAddress}" ORDER BY time DESC LIMIT {limit}')
                 transactionJsonData = c.fetchall()
                 conn.close()
                 allTransactionList = allTransactionList + transactionJsonData 
         rowarray_list = []
-        allTransactionList = sorted(allTransactionList, key=itemgetter('blocktime'), reverse=True)
+        allTransactionList = sorted(allTransactionList, key=itemgetter('time'), reverse=True)
         for row in allTransactionList:
             tx = {}
             tx['transactionDetails'] = json.loads(row[0])
@@ -2054,9 +2054,9 @@ async def transactiondetails1(transactionHash):
 
 @app.route('/api/v2/latestTransactionDetails', methods=['GET'])
 async def latestTransactionDetails():
-    numberOfLatestBlocks = request.args.get('numberOfLatestBlocks')
-    if numberOfLatestBlocks is not None and not check_integer(numberOfLatestBlocks):
-        return jsonify(description='numberOfLatestBlocks validation failed'), 400
+    limit = request.args.get('limit')
+    if limit is not None and not check_integer(limit):
+        return jsonify(description='limit validation failed'), 400
 
     dblocation = dbfolder + '/latestCache.db'
     if os.path.exists(dblocation):
@@ -2065,10 +2065,10 @@ async def latestTransactionDetails():
     else:
         return jsonify(description='Latest transactions db doesn\'t exist. This is unusual, please report on https://github.com/ranchimall/ranchimallflo-api'), 500
 
-    if numberOfLatestBlocks is not None:
-        c.execute('SELECT * FROM latestTransactions WHERE blockNumber IN (SELECT DISTINCT blockNumber FROM latestTransactions ORDER BY blockNumber DESC LIMIT {}) ORDER BY id ASC;'.format(int(numberOfLatestBlocks)))
+    if limit is not None:
+        c.execute('SELECT * FROM latestTransactions WHERE blockNumber IN (SELECT DISTINCT blockNumber FROM latestTransactions ORDER BY blockNumber DESC LIMIT {}) ORDER BY id DESC;'.format(int(limit)))
     else:
-        c.execute('''SELECT * FROM latestTransactions WHERE blockNumber IN (SELECT DISTINCT blockNumber FROM latestTransactions ORDER BY blockNumber DESC) ORDER BY id ASC;''')
+        c.execute('''SELECT * FROM latestTransactions WHERE blockNumber IN (SELECT DISTINCT blockNumber FROM latestTransactions ORDER BY blockNumber DESC) ORDER BY id DESC;''')
     latestTransactions = c.fetchall()
     c.close()
     tx_list = []
@@ -2098,15 +2098,17 @@ async def latestBlockDetails():
         return jsonify(description='Latest transactions db doesn\'t exist. This is unusual, please report on https://github.com/ranchimall/ranchimallflo-api'), 404
 
     if limit is None:
-        c.execute('''SELECT * FROM ( SELECT * FROM latestBlocks ORDER BY blockNumber DESC LIMIT 4) ORDER BY id ASC;''')
+        c.execute('''SELECT jsonData FROM ( SELECT * FROM latestBlocks ORDER BY blockNumber DESC LIMIT 4) ORDER BY id DESC;''')
     else:
-        c.execute(f'SELECT * FROM ( SELECT * FROM latestBlocks ORDER BY blockNumber DESC LIMIT {limit}) ORDER BY id ASC;')
+        c.execute(f'SELECT jsonData FROM ( SELECT * FROM latestBlocks ORDER BY blockNumber DESC LIMIT {limit}) ORDER BY id DESC;')
     latestBlocks = c.fetchall()
     c.close()
-    tempdict = {}
+    
+    templst = []
     for idx, item in enumerate(latestBlocks):
-        tempdict[json.loads(item[3])['hash']] = json.loads(item[3])
-    return jsonify(result='ok', latestBlocks=tempdict)
+        templst.append(json.loads(item[0]))
+        
+    return jsonify(latestBlocks=templst), 200
 
 
 @app.route('/api/v2/blockTransactions/<blockHash>', methods=['GET'])
@@ -2286,4 +2288,4 @@ scheduler.start()
 atexit.register(lambda: scheduler.shutdown())
 
 if __name__ == "__main__":
-    app.run(debug=debug_status, host='0.0.0.0', port=5009)
+    app.run(debug=debug_status, host='0.0.0.0', port=5013)
