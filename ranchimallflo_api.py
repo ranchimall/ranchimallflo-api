@@ -1700,7 +1700,7 @@ async def getcontractparticipants_v2():
 
 
 @app.route('/api/v2/participantDetails/<floAddress>', methods=['GET'])
-async def participantDetails():
+async def participantDetails(floAddress):
     if floAddress is None:
         return jsonify(description='FLO address hasn\'t been passed'), 400
     if not check_flo_address(floAddress, is_testnet):
@@ -1942,8 +1942,10 @@ async def smartcontracttransactions():
         return jsonify(description='Smart Contract with the given name doesn\'t exist'), 404
 
 
-@app.route('/api/v2/smartContractDeposits', methods=['GET'])
+# todo - add options to only ask for active/consumed/returned deposits
+@app.route('/api/v2/smartContractDeposits/', methods=['GET'])
 async def smartcontractdeposits():
+    # todo - put validation for transactionHash
     contractName = request.args.get('contractName')
     if contractName is None:
         return jsonify(description='Smart Contract\'s name hasn\'t been passed'), 400
@@ -1955,14 +1957,34 @@ async def smartcontractdeposits():
     contractAddress = contractAddress.strip()
     if not check_flo_address(contractAddress, is_testnet):
         return jsonify(description='contractAddress validation failed'), 400
-    
+
     contractDbName = '{}-{}.db'.format(contractName, contractAddress)
     filelocation = os.path.join(dbfolder, 'smartContracts', contractDbName)
-
     if os.path.isfile(filelocation):
         # active deposits 
-        # 
-        return 'complete API'
+        conn = sqlite3.connect(filelocation)
+        c = conn.cursor()
+        c.execute('''SELECT depositorAddress, transactionHash, status, depositBalance FROM contractdeposits 
+                    WHERE (transactionHash, id) IN (SELECT transactionHash, MAX(id) FROM contractdeposits GROUP BY transactionHash) 
+                    ORDER BY id DESC
+                    ;''')
+        
+        distinct_deposits = c.fetchall()
+        deposit_info = []
+        for a_deposit in distinct_deposits:
+            #c.execute(f"SELECT depositBalance FROM contractdeposits WHERE (transactionHash, id) IN (SELECT transactionHash, MIN(id) FROM contractdeposits GROUP BY transactionHash );")
+            c.execute(f"SELECT depositBalance, unix_expiryTime FROM contractdeposits WHERE transactionHash=='{a_deposit[1]}' ORDER BY id LIMIT 1")
+            original_deposit_balance = c.fetchall()
+            obj = {
+                'depositorAddress': a_deposit[0],
+                'transactionHash': a_deposit[1],
+                'status': a_deposit[2],
+                'originalBalance': original_deposit_balance[0][0],
+                'currentBalance': a_deposit[3],
+                'time': original_deposit_balance[0][1]
+            }
+            deposit_info.append(obj)
+        return jsonify(depositInfo=deposit_info), 200
     else:
         return jsonify(description='Smart Contract with the given name doesn\'t exist'), 404
 
@@ -2155,8 +2177,8 @@ async def categoriseString_v2(urlstring):
             if urlstring.lower() in onlyfiles:
                 return jsonify(type='token'), 200
             else:
-                contractfolder = os.path.join(dbfolder, 'system.db')
-                conn = sqlite3.connect(contractfolder)
+                systemdb = os.path.join(dbfolder, 'system.db')
+                conn = sqlite3.connect(systemdb)
                 conn.row_factory = lambda cursor, row: row[0]
                 c = conn.cursor()
                 contractList = c.execute('select contractname from activeContracts').fetchall()
