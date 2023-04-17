@@ -1943,7 +1943,7 @@ async def smartcontracttransactions():
 
 
 # todo - add options to only ask for active/consumed/returned deposits
-@app.route('/api/v2/smartContractDeposits/', methods=['GET'])
+@app.route('/api/v2/smartContractDeposits', methods=['GET'])
 async def smartcontractdeposits():
     # todo - put validation for transactionHash
     contractName = request.args.get('contractName')
@@ -1966,8 +1966,7 @@ async def smartcontractdeposits():
         c = conn.cursor()
         c.execute('''SELECT depositorAddress, transactionHash, status, depositBalance FROM contractdeposits 
                     WHERE (transactionHash, id) IN (SELECT transactionHash, MAX(id) FROM contractdeposits GROUP BY transactionHash) 
-                    ORDER BY id DESC
-                    ;''')
+                    ORDER BY id DESC; ''')
         
         distinct_deposits = c.fetchall()
         deposit_info = []
