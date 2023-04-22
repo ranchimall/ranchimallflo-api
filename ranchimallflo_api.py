@@ -18,6 +18,7 @@ import atexit
 import pyflo
 from operator import itemgetter
 import pdb
+import ast
 
 
 app = Quart(__name__)
@@ -107,9 +108,11 @@ def smartcontract_morph_helper(smart_contracts):
         contractDict['contractAddress'] = contract[2]
         contractDict['status'] = contract[3]
         contractDict['contractType'] = contract[5]
-        if contractDict['contractType'] == 'continuous-event':
+        if contractDict['contractType'] in ['continuous-event', 'continuos-event']:
             contractDict['contractSubType'] = 'tokenswap'
-            accepting_selling_tokens = contract[4]
+            accepting_selling_tokens = ast.literal_eval(contract[4])
+            contractDict['acceptingToken'] = accepting_selling_tokens[0]
+            contractDict['sellingToken'] = accepting_selling_tokens[1]
         elif contractDict['contractType'] == 'one-time-event':
             contractDict['tokenIdentification'] = contract[4]
             # pull the contract structure
