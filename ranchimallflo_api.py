@@ -99,6 +99,35 @@ def update_transaction_confirmations(transactionJson):
         transactionJson['confirmations'] = response_data['confirmations']
     return transactionJson
 
+def smartcontract_morph_helper(smart_contracts):
+    contractList = []
+    for idx, contract in enumerate(smart_contracts):
+        contractDict = {}
+        contractDict['contractName'] = contract[1]
+        contractDict['contractAddress'] = contract[2]
+        contractDict['status'] = contract[3]
+        contractDict['contractType'] = contract[5]
+        if contractDict['contractType'] == 'continuous-event':
+            contractDict['contractSubType'] = 'tokenswap'
+            accepting_selling_tokens = contract[4]
+        elif contractDict['contractType'] == 'one-time-event':
+            contractDict['tokenIdentification'] = contract[4]
+            # pull the contract structure
+            contractStructure = fetchContractStructure(contractDict['contractName'], contractDict['contractAddress'])
+            # compare
+            if 'payeeAddress' in contractStructure.keys():
+                contractDict['contractSubType'] = 'time-trigger'
+            else:
+                contractDict['contractSubType'] = 'external-trigger'
+                contractDict['expiryDate'] = contract[9]
+            contractDict['closeDate'] = contract[10]
+
+        contractDict['transactionHash'] = contract[6]
+        contractDict['blockNumber'] = contract[7]
+        contractDict['incorporationDate'] = contract[8]
+        contractList.append(contractDict)
+    return contractList
+
 def smartContractInfo_output(contractName, contractAddress, contractType, subtype):
     if contractType == 'continuos-event' and contractType == 'tokenswap':
         pass
@@ -1387,7 +1416,7 @@ async def floAddressInfo(floAddress):
     # input validation
     if not check_flo_address(floAddress, is_testnet):
         return jsonify(description='floAddress validation failed'), 400 
-    
+
     dblocation = dbfolder + '/system.db'
     if os.path.exists(dblocation):
         conn = sqlite3.connect(dblocation)
@@ -1396,7 +1425,7 @@ async def floAddressInfo(floAddress):
         tokenNames = c.fetchall()
         c.execute(f"SELECT contractName, status, tokenIdentification, contractType, transactionHash, blockNumber, blockHash FROM activecontracts WHERE contractAddress='{floAddress}'")
         incorporatedContracts = c.fetchall()
-
+        detailList = None
         if len(tokenNames) != 0:
             detailList = {}
             for token in tokenNames:
@@ -1411,11 +1440,12 @@ async def floAddressInfo(floAddress):
                     tempdict['balance'] = balance
                     tempdict['token'] = token
                     detailList[token] = tempdict
-        else:
-            # Address is not associated with any token
-            return jsonify(description='FLO address is not associated with any tokens'), 404
-
-        if len(incorporatedContracts) != 0:
+        #else:
+        #    # Address is not associated with any token
+        #    return jsonify(description='FLO address is not associated with any tokens'), 404
+        
+        incorporatedSmartContracts = None
+        if len(incorporatedContracts) > 0:
             incorporatedSmartContracts = []
             for contract in incorporatedContracts:
                 tempdict = {}
@@ -1428,9 +1458,8 @@ async def floAddressInfo(floAddress):
                 tempdict['blockNumber'] = contract[5]
                 tempdict['blockHash'] = contract[6]
                 incorporatedSmartContracts.append(tempdict)
-        else:
-            incorporatedContracts=None
-        return jsonify(floAddress=floAddress, floAddressBalances=detailList, incorporatedSmartContracts=None), 200
+            
+        return jsonify(floAddress=floAddress, floAddressBalances=detailList, incorporatedSmartContracts=incorporatedSmartContracts), 200
 
 
 @app.route('/api/v2/floAddressBalance/<floAddress>', methods=['GET'])
@@ -1556,21 +1585,9 @@ async def getContractList_v2():
     conn = sqlite3.connect(os.path.join(dbfolder, 'system.db'))
     c = conn.cursor()
     smart_contracts = return_smart_contracts(c, contractName, contractAddress)
-    for idx, contract in enumerate(smart_contracts):
-        contractDict = {}
-        contractDict['contractName'] = contract[1]
-        contractDict['contractAddress'] = contract[2]
-        contractDict['status'] = contract[3]
-        contractDict['tokenIdentification'] = contract[4]
-        contractDict['contractType'] = contract[5]
-        contractDict['transactionHash'] = contract[6]
-        contractDict['blockNumber'] = contract[7]
-        contractDict['incorporationDate'] = contract[8]
-        contractDict['expiryDate'] = contract[9]
-        contractDict['closeDate'] = contract[10]
-        contractList.append(contractDict)
+    smart_contracts_morphed = smartcontract_morph_helper(smart_contracts)
     conn.close()
-    return jsonify(smartContracts=contractList), 200
+    return jsonify(smartContracts=smart_contracts_morphed), 200
 
 
 @app.route('/api/v2/smartContractInfo', methods=['GET'])
@@ -2199,26 +2216,10 @@ async def tokenSmartContractList():
     # list of smart contracts
     conn = sqlite3.connect(os.path.join(dbfolder, 'system.db'))
     c = conn.cursor()
-    contractList = []
     c.execute('select * from activecontracts')
     allcontractsDetailList = c.fetchall()
-    for idx, contract in enumerate(allcontractsDetailList):
-        contractDict = {}
-        contractDict['contractName'] = contract[1]
-        contractDict['contractAddress'] = contract[2]
-        contractDict['status'] = contract[3]
-        contractDict['tokenIdentification'] = contract[4]
-        contractDict['contractType'] = contract[5]
-        contractDict['transactionHash'] = contract[6]
-        contractDict['blockNumber'] = contract[7]
-        contractDict['blockHash'] = contract[8]
-        contractDict['incorporationDate'] = contract[9]
-        if contract[10]:
-            contractDict['expiryDate'] = contract[10]
-        if contract[11]:
-            contractDict['closeDate'] = contract[11]
-        contractList.append(contractDict)
-    return jsonify(tokens=filelist, smartContracts=contractList), 200
+    smart_contracts_morphed = smartcontract_morph_helper(allcontractsDetailList)
+    return jsonify(tokens=filelist, smartContracts=smart_contracts_morphed), 200
 
 
 class ServerSentEvent:
