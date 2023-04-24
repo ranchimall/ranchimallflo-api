@@ -113,6 +113,12 @@ def smartcontract_morph_helper(smart_contracts):
             accepting_selling_tokens = ast.literal_eval(contract[4])
             contractDict['acceptingToken'] = accepting_selling_tokens[0]
             contractDict['sellingToken'] = accepting_selling_tokens[1]
+            contractStructure = fetchContractStructure(contractDict['contractName'], contractDict['contractAddress'])
+            if contractStructure['pricetype'] == 'dynamic':
+                # temp fix
+                if 'oracle_address' in contractStructure.keys():
+                    contractDict['oracle_address'] = contractStructure['oracle_address']
+                    contractDict['price'] = fetch_dynamic_swap_price(contractStructure, {'time': datetime.now().timestamp()})
         elif contractDict['contractType'] == 'one-time-event':
             contractDict['tokenIdentification'] = contract[4]
             # pull the contract structure
@@ -121,6 +127,10 @@ def smartcontract_morph_helper(smart_contracts):
             if 'payeeAddress' in contractStructure.keys():
                 contractDict['contractSubType'] = 'time-trigger'
             else:
+                choice_list = []
+                for obj_key in contractStructure['exitconditions'].keys():
+                    choice_list.append(contractStructure['exitconditions'][obj_key])
+                contractDict['userChoices'] = choice_list
                 contractDict['contractSubType'] = 'external-trigger'
                 contractDict['expiryDate'] = contract[9]
             contractDict['closeDate'] = contract[10]
@@ -257,6 +267,105 @@ def updatePrices():
         c.execute(f"UPDATE ratepairs SET price={pair[1]} WHERE ratepair='{pair[0]}'")
     conn.commit()
 
+def fetch_dynamic_swap_price(contractStructure, blockinfo):
+    oracle_address = contractStructure['oracle_address']
+    # fetch transactions from the blockchain where from address : oracle-address... to address: contract address
+    # find the first contract transaction which adheres to price change format
+    # {"price-update":{"contract-name": "", "contract-address": "", "price": 3}}
+    print(f'oracle address is : {oracle_address}')
+    response = requests.get(f'{apiUrl}addr/{oracle_address}')
+    if response.status_code == 200:
+        response = response.json()
+        if 'transactions' not in response.keys(): # API doesn't return 'transactions' key, if 0 txs present on address
+            return float(contractStructure['price'])
+        else:
+            transactions = response['transactions']
+            for transaction_hash in transactions:
+                transaction_response = requests.get(f'{apiUrl}tx/{transaction_hash}')
+                if transaction_response.status_code == 200:
+                    transaction = transaction_response.json()
+                    floData = transaction['floData']
+                    # If the blocktime of the transaction is < than the current block time
+                    if transaction['time'] < blockinfo['time']:
+                        # Check if flodata is in the format we are looking for
+                        # ie. {"price-update":{"contract-name": "", "contract-address": "", "price": 3}}
+                        # and receiver address should be contractAddress
+                        try:
+                            sender_address, receiver_address = find_sender_receiver(transaction)
+                            assert receiver_address == contractStructure['contractAddress']
+                            assert sender_address == oracle_address
+                            floData = json.loads(floData)
+                            # Check if the contract name and address are right
+                            assert floData['price-update']['contract-name'] == contractStructure['contractName']
+                            assert floData['price-update']['contract-address'] == contractStructure['contractAddress']
+                            return float(floData['price-update']['price'])
+                        except:
+                            continue
+                    else:
+                        continue
+                else:
+                    print('API error while fetch_dynamic_swap_price')
+                    return None
+            return float(contractStructure['price'])
+    else:
+        print('API error while fetch_dynamic_swap_price')
+        return None
+
+def find_sender_receiver(transaction_data):
+    # Create vinlist and outputlist
+    vinlist = []
+    querylist = []
+
+    #totalinputval = 0
+    #inputadd = ''
+
+    # todo Rule 40 - For each vin, find the feeding address and the fed value. Make an inputlist containing [inputaddress, n value]
+    for vin in transaction_data["vin"]:
+        vinlist.append([vin["addr"], float(vin["value"])])
+
+    totalinputval = float(transaction_data["valueIn"])
+
+    # todo Rule 41 - Check if all the addresses in a transaction on the input side are the same
+    for idx, item in enumerate(vinlist):
+        if idx == 0:
+            temp = item[0]
+            continue
+        if item[0] != temp:
+            print(f"System has found more than one address as part of vin. Transaction {transaction_data['txid']} is rejected")
+            return 0
+
+    inputlist = [vinlist[0][0], totalinputval]
+    inputadd = vinlist[0][0]
+
+    # todo Rule 42 - If the number of vout is more than 2, reject the transaction
+    if len(transaction_data["vout"]) > 2:
+        print(f"System has found more than 2 address as part of vout. Transaction {transaction_data['txid']} is rejected")
+        return 0
+
+    # todo Rule 43 - A transaction accepted by the system has two vouts, 1. The FLO address of the receiver
+    #      2. Flo address of the sender as change address.  If the vout address is change address, then the other adddress
+    #     is the recevier address
+
+    outputlist = []
+    addresscounter = 0
+    inputcounter = 0
+    for obj in transaction_data["vout"]:
+        if obj["scriptPubKey"]["type"] == "pubkeyhash":
+            addresscounter = addresscounter + 1
+            if inputlist[0] == obj["scriptPubKey"]["addresses"][0]:
+                inputcounter = inputcounter + 1
+                continue
+            outputlist.append([obj["scriptPubKey"]["addresses"][0], obj["value"]])
+
+    if addresscounter == inputcounter:
+        outputlist = [inputlist[0]]
+    elif len(outputlist) != 1:
+        print(f"Transaction's change is not coming back to the input address. Transaction {transaction_data['txid']} is rejected")
+        return 0
+    else:
+        outputlist = outputlist[0]
+
+    return inputlist[0], outputlist[0]
 
 @app.route('/')
 async def welcome_msg():
@@ -1624,8 +1733,14 @@ async def getContractInfo_v2():
             # todo - add code to token tracker to save continuos event subtype KEY as contractSubtype as part of contractStructure and remove the following line
             returnval['contractSubtype'] = 'tokenswap'
             returnval['priceType'] = returnval['pricetype']
+            returnval['acceptingToken'] = returnval['accepting_token']
+            returnval['sellingToken'] = returnval['selling_token']
+            returnval['price'] = fetch_dynamic_swap_price(contractStructure, {'time': datetime.now().timestamp()})
         elif contractStructure['contractType'] == 'one-time-event' and 'exitconditions' in contractStructure.keys():
-            returnval['userChoice'] = contractStructure['exitconditions']
+            choice_list = []
+            for obj_key in contractStructure['exitconditions'].keys():
+                choice_list.append(contractStructure['exitconditions'][obj_key])
+            returnval['userChoices'] = choice_list
             returnval.pop('exitconditions')
             conn, c = create_database_connection('system_dbs')
             c.execute('SELECT status, incorporationDate, expiryDate, closeDate FROM activecontracts WHERE contractName=="{}" AND contractAddress=="{}"'.format(contractName, contractAddress))
