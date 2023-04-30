@@ -2444,4 +2444,4 @@ scheduler.start()
 atexit.register(lambda: scheduler.shutdown())
 
 if __name__ == "__main__":
-    app.run(debug=debug_status, host='0.0.0.0', port=5009)
+    app.run(debug=debug_status, host=HOST, port=PORT)
