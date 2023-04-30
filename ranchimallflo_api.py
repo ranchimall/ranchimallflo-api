@@ -2332,11 +2332,21 @@ async def tokenSmartContractList():
             filelist.append(item[:-3])
 
     # list of smart contracts
+    contractName = request.args.get('contractName')
+    if contractName is not None:
+        contractName = contractName.strip().lower()
+
+    # todo - Add validation for contractAddress and contractName to prevent SQL injection attacks
+    contractAddress = request.args.get('contractAddress')
+    if contractAddress is not None:
+        contractAddress = contractAddress.strip()
+        if not check_flo_address(contractAddress, is_testnet):
+            return jsonify(description='contractAddress validation failed'), 400
     conn = sqlite3.connect(os.path.join(dbfolder, 'system.db'))
     c = conn.cursor()
-    c.execute('select * from activecontracts')
-    allcontractsDetailList = c.fetchall()
-    smart_contracts_morphed = smartcontract_morph_helper(allcontractsDetailList)
+    smart_contracts = return_smart_contracts(c, contractName, contractAddress)
+    smart_contracts_morphed = smartcontract_morph_helper(smart_contracts)
+    conn.close()
     return jsonify(tokens=filelist, smartContracts=smart_contracts_morphed), 200
 
 
