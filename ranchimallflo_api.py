@@ -367,6 +367,12 @@ def find_sender_receiver(transaction_data):
 
     return inputlist[0], outputlist[0]
 
+def fetch_contract_status_time_info(contractName, contractAddress):
+    conn, c = create_database_connection('system_dbs')
+    c.execute('SELECT status, incorporationDate, expiryDate, closeDate FROM activecontracts WHERE contractName=="{}" AND contractAddress=="{}" ORDER BY id DESC LIMIT 1'.format(contractName, contractAddress))
+    contract_status_time_info = c.fetchall()
+    return contract_status_time_info
+
 @app.route('/')
 async def welcome_msg():
     return jsonify('Welcome to RanchiMall FLO Api v2')
@@ -1742,20 +1748,28 @@ async def getContractInfo_v2():
                 choice_list.append(contractStructure['exitconditions'][obj_key])
             returnval['userChoices'] = choice_list
             returnval.pop('exitconditions')
-            conn, c = create_database_connection('system_dbs')
-            c.execute('SELECT status, incorporationDate, expiryDate, closeDate FROM activecontracts WHERE contractName=="{}" AND contractAddress=="{}"'.format(contractName, contractAddress))
-            results = c.fetchall()
-            if len(results) == 1:
-                for result in results:
-                    returnval['status'] = result[0]
-                    returnval['incorporationDate'] = result[1]
-                    if result[2]:
-                        returnval['expiryDate'] = result[2]
-                    if result[3]:
-                        returnval['closeDate'] = result[3]
+
+            contract_status_time_info = fetch_contract_status_time_info(contractName, contractAddress)
+            if len(contract_status_time_info) == 1:
+                for status_time_info in contract_status_time_info:
+                    returnval['status'] = status_time_info[0]
+                    returnval['incorporationDate'] = status_time_info[1]
+                    if status_time_info[2]:
+                        returnval['expiryDate'] = status_time_info[2]
+                    if status_time_info[3]:
+                        returnval['closeDate'] = status_time_info[3]
             # todo - add code to token tracker to save one-time-event subtype as part of contractStructure and remove the following line
             returnval['contractSubtype'] = 'external-trigger'
         elif contractStructure['contractType'] == 'one-time-event' and 'payeeAddress' in contractStructure.keys():
+            contract_status_time_info = fetch_contract_status_time_info(contractName, contractAddress)
+            if len(contract_status_time_info) == 1:
+                for status_time_info in contract_status_time_info:
+                    returnval['status'] = status_time_info[0]
+                    returnval['incorporationDate'] = status_time_info[1]
+                    if status_time_info[2]:
+                        returnval['expiryDate'] = status_time_info[2]
+                    if status_time_info[3]:
+                        returnval['closeDate'] = status_time_info[3]
             returnval['contractSubtype'] = 'time-trigger'
 
         return jsonify(contractName=contractName, contractAddress=contractAddress, contractInfo=returnval), 200
@@ -2416,7 +2430,6 @@ async def priceData():
 
 #######################
 #######################
-
 
 # if system.db isn't present, initialize it
 if not os.path.isfile(f"system.db"):
