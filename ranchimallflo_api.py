@@ -2090,9 +2090,7 @@ async def smartcontractdeposits():
                 'time': original_deposit_balance[0][1]
             }
             deposit_info.append(obj)
-        c.execute('''SELECT depositorAddress, transactionHash, status, depositBalance FROM contractdeposits 
-                    WHERE (transactionHash, id) IN (SELECT transactionHash, MAX(id) FROM contractdeposits GROUP BY transactionHash) 
-                    ORDER BY id DESC; ''')
+        c.execute('SELECT SUM(depositBalance) AS totalDepositBalance FROM contractdeposits c1 WHERE id = ( SELECT MAX(id) FROM contractdeposits c2 WHERE c1.transactionHash = c2.transactionHash);')
         currentDepositBalance = c.fetchall()[0][0]
         return jsonify(currentDepositBalance=currentDepositBalance, depositInfo=deposit_info), 200
     else:
