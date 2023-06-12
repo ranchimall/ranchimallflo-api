@@ -1736,6 +1736,8 @@ async def getContractInfo_v2():
             returnval['totalHonorAmount'] = participation_details[0][2]
             c.execute('SELECT COUNT(DISTINCT transactionHash) FROM contractdeposits')
             returnval['numberOfDeposits'] = c.fetchall()[0][0]
+            c.execute('SELECT SUM(depositBalance) AS totalDepositBalance FROM contractdeposits c1 WHERE id = ( SELECT MAX(id) FROM contractdeposits c2 WHERE c1.transactionHash = c2.transactionHash);')
+            returnval['currentDepositBalance'] = c.fetchall()[0][0]
             # todo - add code to token tracker to save continuos event subtype KEY as contractSubtype as part of contractStructure and remove the following line
             returnval['contractSubtype'] = 'tokenswap'
             returnval['priceType'] = returnval['pricetype']
@@ -2088,7 +2090,11 @@ async def smartcontractdeposits():
                 'time': original_deposit_balance[0][1]
             }
             deposit_info.append(obj)
-        return jsonify(depositInfo=deposit_info), 200
+        c.execute('''SELECT depositorAddress, transactionHash, status, depositBalance FROM contractdeposits 
+                    WHERE (transactionHash, id) IN (SELECT transactionHash, MAX(id) FROM contractdeposits GROUP BY transactionHash) 
+                    ORDER BY id DESC; ''')
+        currentDepositBalance = c.fetchall()[0][0]
+        return jsonify(currentDepositBalance=currentDepositBalance, depositInfo=deposit_info), 200
     else:
         return jsonify(description='Smart Contract with the given name doesn\'t exist'), 404
 
