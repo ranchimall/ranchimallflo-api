@@ -25,6 +25,9 @@ app = Quart(__name__)
 app.clients = set()
 app = cors(app, allow_origin="*")
 
+# Global values and config
+internalTransactionTypes = [ 'tokenswapDepositSettlement', 'tokenswapParticipationSettlement']
+
 if net == 'mainnet':
     is_testnet = False
 elif net == 'testnet':
@@ -372,6 +375,79 @@ def fetch_contract_status_time_info(contractName, contractAddress):
     c.execute('SELECT status, incorporationDate, expiryDate, closeDate FROM activecontracts WHERE contractName=="{}" AND contractAddress=="{}" ORDER BY id DESC LIMIT 1'.format(contractName, contractAddress))
     contract_status_time_info = c.fetchall()
     return contract_status_time_info
+
+def fetch_token_transactions(token, senderFloAddress=None, destFloAddress=None, limit=None):
+    dblocation = dbfolder + '/tokens/' + str(token) + '.db'
+    if os.path.exists(dblocation):
+        conn = sqlite3.connect(dblocation)
+        conn.row_factory = sqlite3.Row
+        c = conn.cursor()
+    else:
+        return jsonify(description="Token doesn't exist"), 404
+
+    # Build the base SQL query
+    query = 'SELECT jsonData, parsedFloData, time, transactionType, sourceFloAddress, destFloAddress, transferAmount FROM transactionHistory'
+
+    # Build the WHERE clause based on conditions
+    conditions = []
+    parameters = {}
+
+    if senderFloAddress and not destFloAddress:
+        conditions.append('sourceFloAddress=:sender_flo_address')
+        parameters['sender_flo_address'] = senderFloAddress
+
+    elif not senderFloAddress and destFloAddress:
+        conditions.append('destFloAddress=:dest_flo_address')
+        parameters['dest_flo_address'] = destFloAddress
+
+    elif senderFloAddress and destFloAddress:
+        conditions.append('sourceFloAddress=:sender_flo_address AND destFloAddress=:dest_flo_address')
+        parameters['sender_flo_address'] = senderFloAddress
+        parameters['dest_flo_address'] = destFloAddress
+
+    # Add the WHERE clause if conditions exist
+    if conditions:
+        query += ' WHERE {}'.format(' AND '.join(conditions))
+
+    # Add the LIMIT clause if specified
+    if limit is not None:
+        query += ' LIMIT :limit'
+        parameters['limit'] = limit
+
+    # Execute the query with parameters
+    c.execute(query, parameters)
+    transactionJsonData = c.fetchall()
+    conn.close()
+
+    rowarray_list = []
+    for row in transactionJsonData:
+        transactions_object = {}
+        parsedFloData = json.loads(row[1])
+        transactionDetails = json.loads(row[0])
+        if row[3] in internalTransactionTypes:
+            internal_info = {}
+            internal_info['senderAddress'] = row[4]
+            internal_info['receiverAddress'] = row[5]
+            internal_info['tokenAmount'] = row[6]
+            internal_info['tokenIdentification'] = token
+            internal_info['contractName'] = parsedFloData['contractName']
+            internal_info['transactionTrigger'] = transactionDetails['txid']
+            internal_info['time'] = transactionDetails['time']
+            internal_info['type'] = row[3]
+            internal_info['onChain'] = False
+            transactions_object = internal_info
+        else:
+            transactions_object = {**parsedFloData, **transactionDetails}
+            transactions_object = update_transaction_confirmations(transactions_object)
+            transactions_object['onChain'] = True
+        rowarray_list.append(transactions_object)
+    return rowarray_list
+
+
+def sort_token_transactions(transactionJsonData):
+    transactionJsonData = sorted(transactionJsonData, key=lambda x: x['time'], reverse=True)
+    return transactionJsonData
+
 
 @app.route('/')
 async def welcome_msg():
@@ -1463,47 +1539,10 @@ async def tokenTransactions(token):
     limit = request.args.get('limit')
     if limit is not None and not check_integer(limit):
         return jsonify(description='limit validation failed'), 400
-
-    dblocation = dbfolder + '/tokens/' + str(token) + '.db'
-    if os.path.exists(dblocation):
-        conn = sqlite3.connect(dblocation)
-        conn.row_factory = sqlite3.Row
-        c = conn.cursor()
-    else:
-        return jsonify(description="Token doesn't exist"), 404
-
-    if senderFloAddress and not destFloAddress:
-        if limit is None:
-            c.execute('SELECT jsonData, parsedFloData, time FROM transactionHistory WHERE sourceFloAddress="{}"'.format(senderFloAddress))
-        else:
-            c.execute('SELECT jsonData, parsedFloData, time FROM transactionHistory WHERE sourceFloAddress="{}" LIMIT {}'.format(senderFloAddress, limit))
-    elif not senderFloAddress and destFloAddress:
-        if limit is None:
-            c.execute('SELECT jsonData, parsedFloData, time FROM transactionHistory WHERE destFloAddress="{}"'.format(destFloAddress))
-        else:
-            c.execute('SELECT jsonData, parsedFloData, time FROM transactionHistory WHERE destFloAddress="{}" LIMIT {}'.format(destFloAddress, limit))
-    elif senderFloAddress and destFloAddress:
-        if limit is None:
-            c.execute('SELECT jsonData, parsedFloData, time FROM transactionHistory WHERE sourceFloAddress="{}" AND destFloAddress="{}"'.format(senderFloAddress, destFloAddress))
-        else:
-            c.execute('SELECT jsonData, parsedFloData, time FROM transactionHistory WHERE sourceFloAddress="{}" AND destFloAddress="{}" LIMIT {}'.format(senderFloAddress, destFloAddress, limit))
-    else:
-        if limit is None:
-            c.execute('SELECT jsonData, parsedFloData, time FROM transactionHistory')
-        else:
-            c.execute('SELECT jsonData, parsedFloData, time FROM transactionHistory LIMIT {}'.format(limit))
-    transactionJsonData = c.fetchall()
-    conn.close()
-
-    rowarray_list = []
-    sorted_list = sorted(transactionJsonData, key=itemgetter('time'), reverse=True)
-    for row in sorted_list:
-        transactions_object = {}
-        transactions_object['transactionDetails'] = json.loads(row[0])
-        transactions_object['transactionDetails'] = update_transaction_confirmations(transactions_object['transactionDetails'])
-        transactions_object['parsedFloData'] = json.loads(row[1])
-        rowarray_list.append(transactions_object)
-    return jsonify(token=token, transactions=rowarray_list), 200
+    
+    transactionJsonData = fetch_token_transactions(token, senderFloAddress, destFloAddress, limit)
+    sortedFormattedTransactions = sort_token_transactions(transactionJsonData)
+    return jsonify(token=token, transactions=sortedFormattedTransactions), 200
 
 
 @app.route('/api/v2/tokenBalances/<token>', methods=['GET'])
@@ -1625,7 +1664,7 @@ async def floAddressBalance(floAddress):
         c.execute(f'SELECT SUM(transferBalance) FROM activeTable WHERE address="{floAddress}"')
         balance = c.fetchall()[0][0]
         conn.close()
-        return jsonify(token=token, floAddress=floAddress, balance=balance), 200
+        return jsonify(floAddress=floAddress, token=token, balance=balance), 200
 
 
 @app.route('/api/v2/floAddressTransactions/<floAddress>', methods=['GET'])
@@ -1657,30 +1696,14 @@ async def floAddressTransactions(floAddress):
         allTransactionList = []
         for tokenname in tokenNames:
             tokenname = tokenname[0]
-            dblocation = dbfolder + '/tokens/' + str(tokenname) + '.db'
-            if os.path.exists(dblocation):
-                conn = sqlite3.connect(dblocation)
-                conn.row_factory = sqlite3.Row
-                c = conn.cursor()
-                if limit is None:
-                    c.execute(f'SELECT jsonData, parsedFloData, time FROM transactionHistory WHERE sourceFloAddress="{floAddress}" OR destFloAddress="{floAddress}" ORDER BY time DESC')
-                else:
-                    c.execute(f'SELECT jsonData, parsedFloData, time FROM transactionHistory WHERE sourceFloAddress="{floAddress}" OR destFloAddress="{floAddress}" ORDER BY time DESC LIMIT {limit}')
-                transactionJsonData = c.fetchall()
-                conn.close()
-                allTransactionList = allTransactionList + transactionJsonData 
-        rowarray_list = []
-        allTransactionList = sorted(allTransactionList, key=itemgetter('time'), reverse=True)
-        for row in allTransactionList:
-            tx = {}
-            tx['transactionDetails'] = json.loads(row[0])
-            tx['transactionDetails'] = update_transaction_confirmations(tx['transactionDetails'])
-            tx['parsedFloData'] = json.loads(row[1])
-            rowarray_list.append(tx)
+            transactionJsonData = fetch_token_transactions(tokenname, limit=limit)
+            allTransactionList = allTransactionList + transactionJsonData 
+        
+        sortedFormattedTransactions = sort_token_transactions(allTransactionList)
         if token is None:
-            return jsonify(floAddress=floAddress, transactions=rowarray_list), 200
+            return jsonify(floAddress=floAddress, transactions=sortedFormattedTransactions), 200
         else:
-            return jsonify(floAddress=floAddress, transactions=rowarray_list, token=token), 200
+            return jsonify(floAddress=floAddress, transactions=sortedFormattedTransactions, token=token), 200
     else:
         return jsonify(floAddress=floAddress, transactions=[], token=token), 200
 
@@ -2043,6 +2066,10 @@ async def smartcontracttransactions():
             tx['transactionDetails'] = json.loads(item[0])
             tx['transactionDetails'] = update_transaction_confirmations(tx['transactionDetails'])
             tx['parsedFloData'] = json.loads(item[1])
+            
+            tx = {**tx['transactionDetails'], **tx['parsedFloData']}
+            # TODO (CRITICAL): Write conditions to include and filter on chain and offchain transactions
+            tx['onChain'] = True            
             returnval.append(tx)
         return jsonify(contractName=contractName, contractAddress=contractAddress, contractTransactions=returnval), 200
     else:
@@ -2182,8 +2209,13 @@ async def transactiondetails1(transactionHash):
             winningAmount = c.fetchall()
             if winningAmount[0][0] is not None:
                 operationDetails['winningAmount'] = winningAmount[0][0]
-
-        return jsonify(parsedFloData=parseResult, transactionDetails=transactionJson, transactionHash=transactionHash, operation=operation, operationDetails=operationDetails, senderAddress=sender_address, receiverAddress=receiver_address), 200
+        
+        mergeTx = {**parseResult, **transactionJson}
+        mergeTx['operation'] = operation
+        mergeTx['operationDetails'] = operationDetails
+        # TODO (CRITICAL): Write conditions to include and filter on chain and offchain transactions   
+        mergeTx['onChain'] = True     
+        return jsonify(mergeTx), 200
     else:
         return jsonify(description='Transaction doesn\'t exist in database'), 404
 
@@ -2216,6 +2248,9 @@ async def latestTransactionDetails():
         tx_parsed_details['parsedFloData'] = json.loads(item[5])
         tx_parsed_details['parsedFloData']['transactionType'] = item[4]
         tx_parsed_details['transactionDetails']['blockheight'] = int(item[2])
+        tx_parsed_details = {**tx_parsed_details['transactionDetails'], **tx_parsed_details['parsedFloData']}
+        # TODO (CRITICAL): Write conditions to include and filter on chain and offchain transactions
+        tx_parsed_details['onChain'] = True
         tx_list.append(tx_parsed_details)
     return jsonify(latestTransactions=tx_list), 200
 
@@ -2258,10 +2293,14 @@ async def blocktransactions(blockHash):
             temptx = transactiondetailhelper(blocktxlist[i])                        
             transactionJson = json.loads(temptx[0][0])
             parseResult = json.loads(temptx[0][1])
-            blocktxs[blocktxlist[i]] = {
-                "parsedFloData" : parseResult,
-                "transactionDetails" : transactionJson
-            }
+            # blocktxs[blocktxlist[i]] = {
+            #     "parsedFloData" : parseResult,
+            #     "transactionDetails" : transactionJson
+            # }
+
+            blocktxs = {**parseResult , **transactionJson}
+            # TODO (CRITICAL): Write conditions to include and filter on chain and offchain transactions
+            blocktxs['onChain'] = True
         return jsonify(transactions=blocktxs, blockKeyword=blockHash), 200
     else:
         return jsonify(description='Block doesn\'t exist in database'), 404
