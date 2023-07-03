@@ -1569,7 +1569,7 @@ async def tokenTransactions(token):
     if limit is not None and not check_integer(limit):
         return jsonify(description='limit validation failed'), 400
     
-    filelocation = os.path.join(dbfolder, 'tokens', f'tokens.db')
+    filelocation = os.path.join(dbfolder, 'tokens', f'{token}.db')
 
     if os.path.isfile(filelocation):
         transactionJsonData = fetch_token_transactions(token, senderFloAddress, destFloAddress, limit)
