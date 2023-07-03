@@ -25,7 +25,7 @@ app = Quart(__name__)
 app.clients = set()
 app = cors(app, allow_origin="*")
 
-# Global values and config
+# Global values and configg
 internalTransactionTypes = [ 'tokenswapDepositSettlement', 'tokenswapParticipationSettlement']
 
 if net == 'mainnet':
@@ -376,6 +376,31 @@ def fetch_contract_status_time_info(contractName, contractAddress):
     contract_status_time_info = c.fetchall()
     return contract_status_time_info
 
+def transaction_post_processing(transactionJsonData):
+    rowarray_list = []
+    for row in transactionJsonData:
+        transactions_object = {}
+        parsedFloData = json.loads(row[1])
+        transactionDetails = json.loads(row[0])
+        if row[3] in internalTransactionTypes:
+            internal_info = {}
+            internal_info['senderAddress'] = row[4]
+            internal_info['receiverAddress'] = row[5]
+            internal_info['tokenAmount'] = row[6]
+            internal_info['tokenIdentification'] = row[7]
+            internal_info['contractName'] = parsedFloData['contractName']
+            internal_info['transactionTrigger'] = transactionDetails['txid']
+            internal_info['time'] = transactionDetails['time']
+            internal_info['type'] = row[3]
+            internal_info['onChain'] = False
+            transactions_object = internal_info
+        else:
+            transactions_object = {**parsedFloData, **transactionDetails}
+            transactions_object = update_transaction_confirmations(transactions_object)
+            transactions_object['onChain'] = True
+        rowarray_list.append(transactions_object)
+    return rowarray_list
+
 def fetch_token_transactions(token, senderFloAddress=None, destFloAddress=None, limit=None):
     dblocation = dbfolder + '/tokens/' + str(token) + '.db'
     if os.path.exists(dblocation):
@@ -386,7 +411,7 @@ def fetch_token_transactions(token, senderFloAddress=None, destFloAddress=None, 
         return jsonify(description="Token doesn't exist"), 404
 
     # Build the base SQL query
-    query = 'SELECT jsonData, parsedFloData, time, transactionType, sourceFloAddress, destFloAddress, transferAmount FROM transactionHistory'
+    query = f"SELECT jsonData, parsedFloData, time, transactionType, sourceFloAddress, destFloAddress, transferAmount, '{token}' AS token FROM transactionHistory"
 
     # Build the WHERE clause based on conditions
     conditions = []
@@ -418,33 +443,37 @@ def fetch_token_transactions(token, senderFloAddress=None, destFloAddress=None, 
     c.execute(query, parameters)
     transactionJsonData = c.fetchall()
     conn.close()
+    return transaction_post_processing(transactionJsonData)
 
-    rowarray_list = []
-    for row in transactionJsonData:
-        transactions_object = {}
-        parsedFloData = json.loads(row[1])
-        transactionDetails = json.loads(row[0])
-        if row[3] in internalTransactionTypes:
-            internal_info = {}
-            internal_info['senderAddress'] = row[4]
-            internal_info['receiverAddress'] = row[5]
-            internal_info['tokenAmount'] = row[6]
-            internal_info['tokenIdentification'] = token
-            internal_info['contractName'] = parsedFloData['contractName']
-            internal_info['transactionTrigger'] = transactionDetails['txid']
-            internal_info['time'] = transactionDetails['time']
-            internal_info['type'] = row[3]
-            internal_info['onChain'] = False
-            transactions_object = internal_info
-        else:
-            transactions_object = {**parsedFloData, **transactionDetails}
-            transactions_object = update_transaction_confirmations(transactions_object)
-            transactions_object['onChain'] = True
-        rowarray_list.append(transactions_object)
-    return rowarray_list
+def fetch_contract_transactions(contractName, contractAddress):
+    sc_file = os.path.join(dbfolder, 'smartContracts', '{}-{}.db'.format(contractName, contractAddress))
+    conn = sqlite3.connect(sc_file)
+    c = conn.cursor()
+    # Find token db names and attach
+    contractStructure = fetchContractStructure(contractName, contractAddress)
+    token1 = contractStructure['accepting_token']
+    token2 = contractStructure['selling_token']
+    token1_file = f"{dbfolder}/tokens/{token1}.db"
+    token2_file = f"{dbfolder}/tokens/{token2}.db"
+    conn.execute(f"ATTACH DATABASE '{token1_file}' AS token1db")
+    conn.execute(f"ATTACH DATABASE '{token2_file}' AS token2db")
+    
+    # Get data from db
+    c.execute(f'''
+    SELECT t1.jsonData, t1.parsedFloData, t1.time, t1.transactionType, t1.sourceFloAddress, t1.destFloAddress, t1.transferAmount, '{token1}' AS token 
+    FROM main.contractTransactionHistory AS s 
+    INNER JOIN token1db.transactionHistory AS t1 
+    ON t1.transactionHash = s.transactionHash 
+    UNION 
+    SELECT t2.jsonData, t2.parsedFloData, t2.time, t2.transactionType, t2.sourceFloAddress, t2.destFloAddress, t2.transferAmount, '{token2}' AS token 
+    FROM main.contractTransactionHistory AS s 
+    INNER JOIN token2db.transactionHistory AS t2 
+    ON t2.transactionHash = s.transactionHash''')
+    
+    transactionJsonData = c.fetchall()   
+    return transaction_post_processing(transactionJsonData)
 
-
-def sort_token_transactions(transactionJsonData):
+def sort_transactions(transactionJsonData):
     transactionJsonData = sorted(transactionJsonData, key=lambda x: x['time'], reverse=True)
     return transactionJsonData
 
@@ -1540,9 +1569,14 @@ async def tokenTransactions(token):
     if limit is not None and not check_integer(limit):
         return jsonify(description='limit validation failed'), 400
     
-    transactionJsonData = fetch_token_transactions(token, senderFloAddress, destFloAddress, limit)
-    sortedFormattedTransactions = sort_token_transactions(transactionJsonData)
-    return jsonify(token=token, transactions=sortedFormattedTransactions), 200
+    filelocation = os.path.join(dbfolder, 'tokens', f'tokens.db')
+
+    if os.path.isfile(filelocation):
+        transactionJsonData = fetch_token_transactions(token, senderFloAddress, destFloAddress, limit)
+        sortedFormattedTransactions = sort_transactions(transactionJsonData)
+        return jsonify(token=token, transactions=sortedFormattedTransactions), 200
+    else:
+        return jsonify(description='Token with the given name doesn\'t exist'), 404
 
 
 @app.route('/api/v2/tokenBalances/<token>', methods=['GET'])
@@ -1699,7 +1733,7 @@ async def floAddressTransactions(floAddress):
             transactionJsonData = fetch_token_transactions(tokenname, limit=limit)
             allTransactionList = allTransactionList + transactionJsonData 
         
-        sortedFormattedTransactions = sort_token_transactions(allTransactionList)
+        sortedFormattedTransactions = sort_transactions(allTransactionList)
         if token is None:
             return jsonify(floAddress=floAddress, transactions=sortedFormattedTransactions), 200
         else:
@@ -2052,26 +2086,9 @@ async def smartcontracttransactions():
 
     if os.path.isfile(filelocation):
         # Make db connection and fetch data
-        conn = sqlite3.connect(filelocation)
-        c = conn.cursor()
-        if limit is None:
-            c.execute('SELECT jsonData, parsedFloData FROM contractTransactionHistory ORDER BY time DESC')
-        else:
-            c.execute(f'SELECT jsonData, parsedFloData FROM contractTransactionHistory ORDER BY time DESC LIMIT {limit}')
-        result = c.fetchall()
-        conn.close()
-        returnval = []
-        for item in result:
-            tx = {}
-            tx['transactionDetails'] = json.loads(item[0])
-            tx['transactionDetails'] = update_transaction_confirmations(tx['transactionDetails'])
-            tx['parsedFloData'] = json.loads(item[1])
-            
-            tx = {**tx['transactionDetails'], **tx['parsedFloData']}
-            # TODO (CRITICAL): Write conditions to include and filter on chain and offchain transactions
-            tx['onChain'] = True            
-            returnval.append(tx)
-        return jsonify(contractName=contractName, contractAddress=contractAddress, contractTransactions=returnval), 200
+        transactionJsonData = fetch_contract_transactions(contractName, contractAddress)
+        transactionJsonData = sort_transactions(transactionJsonData)
+        return jsonify(contractName=contractName, contractAddress=contractAddress, contractTransactions=transactionJsonData), 200
     else:
         return jsonify(description='Smart Contract with the given name doesn\'t exist'), 404
 
