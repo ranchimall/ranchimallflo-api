@@ -401,7 +401,7 @@ def transaction_post_processing(transactionJsonData):
         rowarray_list.append(transactions_object)
     return rowarray_list
 
-def fetch_token_transactions(token, senderFloAddress=None, destFloAddress=None, limit=None):
+def fetch_token_transactions(token, senderFloAddress=None, destFloAddress=None, limit=None, use_and=False):
     dblocation = dbfolder + '/tokens/' + str(token) + '.db'
     if os.path.exists(dblocation):
         conn = sqlite3.connect(dblocation)
@@ -426,7 +426,10 @@ def fetch_token_transactions(token, senderFloAddress=None, destFloAddress=None, 
         parameters['dest_flo_address'] = destFloAddress
 
     elif senderFloAddress and destFloAddress:
-        conditions.append('sourceFloAddress=:sender_flo_address AND destFloAddress=:dest_flo_address')
+        if use_and:
+            conditions.append('sourceFloAddress=:sender_flo_address AND destFloAddress=:dest_flo_address')
+        else:
+            conditions.append('sourceFloAddress=:sender_flo_address OR destFloAddress=:dest_flo_address')
         parameters['sender_flo_address'] = senderFloAddress
         parameters['dest_flo_address'] = destFloAddress
 
@@ -1568,11 +1571,14 @@ async def tokenTransactions(token):
     limit = request.args.get('limit')
     if limit is not None and not check_integer(limit):
         return jsonify(description='limit validation failed'), 400
+    use_AND = request.args.get('use_AND')
+    if use_AND is not None and use_AND not in [True, False]:
+        return jsonify(description='use_AND validation failed'), 400
     
     filelocation = os.path.join(dbfolder, 'tokens', f'{token}.db')
 
     if os.path.isfile(filelocation):
-        transactionJsonData = fetch_token_transactions(token, senderFloAddress, destFloAddress, limit)
+        transactionJsonData = fetch_token_transactions(token, senderFloAddress, destFloAddress, limit, use_AND)
         sortedFormattedTransactions = sort_transactions(transactionJsonData)
         return jsonify(token=token, transactions=sortedFormattedTransactions), 200
     else:
@@ -1730,7 +1736,7 @@ async def floAddressTransactions(floAddress):
         allTransactionList = []
         for tokenname in tokenNames:
             tokenname = tokenname[0]
-            transactionJsonData = fetch_token_transactions(tokenname, limit=limit)
+            transactionJsonData = fetch_token_transactions(tokenname, senderFloAddress=floAddress, destFloAddress=floAddress, limit=limit)
             allTransactionList = allTransactionList + transactionJsonData 
         
         sortedFormattedTransactions = sort_transactions(allTransactionList)
