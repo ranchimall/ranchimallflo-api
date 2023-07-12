@@ -476,6 +476,41 @@ def fetch_contract_transactions(contractName, contractAddress):
     transactionJsonData = c.fetchall()   
     return transaction_post_processing(transactionJsonData)
 
+
+def fetch_contract_transactions_1(contractName, contractAddress, transactionHash=None):
+    sc_file = os.path.join(dbfolder, 'smartContracts', '{}-{}.db'.format(contractName, contractAddress))
+    conn = sqlite3.connect(sc_file)
+    c = conn.cursor()
+    # Find token db names and attach
+    contractStructure = fetchContractStructure(contractName, contractAddress)
+    token1 = contractStructure['accepting_token']
+    token2 = contractStructure['selling_token']
+    token1_file = f"{dbfolder}/tokens/{token1}.db"
+    token2_file = f"{dbfolder}/tokens/{token2}.db"
+    conn.execute(f"ATTACH DATABASE '{token1_file}' AS token1db")
+    conn.execute(f"ATTACH DATABASE '{token2_file}' AS token2db")
+    
+    # Get data from db
+    query = f'''
+    SELECT t1.jsonData, t1.parsedFloData, t1.time, t1.transactionType, t1.sourceFloAddress, t1.destFloAddress, t1.transferAmount, '{token1}' AS token 
+    FROM main.contractTransactionHistory AS s 
+    INNER JOIN token1db.transactionHistory AS t1 
+    ON t1.transactionHash = s.transactionHash AND s.transactionHash = '{transactionHash}'
+    UNION 
+    SELECT t2.jsonData, t2.parsedFloData, t2.time, t2.transactionType, t2.sourceFloAddress, t2.destFloAddress, t2.transferAmount, '{token2}' AS token 
+    FROM main.contractTransactionHistory AS s 
+    INNER JOIN token2db.transactionHistory AS t2 
+    ON t2.transactionHash = s.transactionHash AND s.transactionHash = '{transactionHash}' '''
+
+    '''if transactionHash:
+        query += f" WHERE s.transactionHash = '{transactionHash}'"'''
+    
+    c.execute(query)
+    
+    transactionJsonData = c.fetchall()   
+    return transaction_post_processing(transactionJsonData)
+
+
 def sort_transactions(transactionJsonData):
     transactionJsonData = sorted(transactionJsonData, key=lambda x: x['time'], reverse=True)
     return transactionJsonData
@@ -2162,6 +2197,7 @@ async def blockdetails(blockHash):
 async def transactiondetails1(transactionHash):
     # todo - validate transactionHash
     transactionJsonData = transactiondetailhelper(transactionHash)
+
     if len(transactionJsonData) != 0:
         transactionJson = json.loads(transactionJsonData[0][0])
         transactionJson = update_transaction_confirmations(transactionJson)
@@ -2169,7 +2205,12 @@ async def transactiondetails1(transactionHash):
         operation = transactionJsonData[0][2]
         db_reference = transactionJsonData[0][3]
         sender_address, receiver_address = extract_ip_op_addresses(transactionJson)
+        contractName, contractAddress = db_reference.rsplit('-',1)
 
+        mergeTx = {**parseResult, **transactionJson}
+        # TODO (CRITICAL): Write conditions to include and filter on chain and offchain transactions   
+        mergeTx['onChain'] = True  
+        
         operationDetails = {}
         if operation == 'smartContractDeposit':
             # open the db reference and check if there is a deposit return 
@@ -2233,11 +2274,17 @@ async def transactiondetails1(transactionHash):
             if winningAmount[0][0] is not None:
                 operationDetails['winningAmount'] = winningAmount[0][0]
         
-        mergeTx = {**parseResult, **transactionJson}
+        elif operation == 'tokenswapParticipation':
+            conn = sqlite3.connect(f"{dbfolder}/smartContracts/{db_reference}.db")
+            c = conn.cursor()            
+            txhash_txs = fetch_contract_transactions_1(contractName, contractAddress, transactionHash)
+            mergeTx['subtxs'] = []
+            for transaction in txhash_txs:
+                if transaction['onChain'] == False:
+                    mergeTx['subtxs'].append(transaction)
+        
         mergeTx['operation'] = operation
         mergeTx['operationDetails'] = operationDetails
-        # TODO (CRITICAL): Write conditions to include and filter on chain and offchain transactions   
-        mergeTx['onChain'] = True     
         return jsonify(mergeTx), 200
     else:
         return jsonify(description='Transaction doesn\'t exist in database'), 404
