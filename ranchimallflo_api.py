@@ -2278,10 +2278,10 @@ async def transactiondetails1(transactionHash):
             conn = sqlite3.connect(f"{dbfolder}/smartContracts/{db_reference}.db")
             c = conn.cursor()            
             txhash_txs = fetch_contract_transactions_1(contractName, contractAddress, transactionHash)
-            mergeTx['subtxs'] = []
+            mergeTx['subTransactions'] = []
             for transaction in txhash_txs:
                 if transaction['onChain'] == False:
-                    mergeTx['subtxs'].append(transaction)
+                    mergeTx['subTransactions'].append(transaction)
         
         mergeTx['operation'] = operation
         mergeTx['operationDetails'] = operationDetails
