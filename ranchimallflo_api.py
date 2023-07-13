@@ -2205,11 +2205,10 @@ async def transactiondetails1(transactionHash):
         operation = transactionJsonData[0][2]
         db_reference = transactionJsonData[0][3]
         sender_address, receiver_address = extract_ip_op_addresses(transactionJson)
-        contractName, contractAddress = db_reference.rsplit('-',1)
 
         mergeTx = {**parseResult, **transactionJson}
         # TODO (CRITICAL): Write conditions to include and filter on chain and offchain transactions   
-        mergeTx['onChain'] = True  
+        mergeTx['onChain'] = True 
         
         operationDetails = {}
         if operation == 'smartContractDeposit':
@@ -2275,6 +2274,7 @@ async def transactiondetails1(transactionHash):
                 operationDetails['winningAmount'] = winningAmount[0][0]
         
         elif operation == 'tokenswapParticipation':
+            contractName, contractAddress = db_reference.rsplit('-',1)
             conn = sqlite3.connect(f"{dbfolder}/smartContracts/{db_reference}.db")
             c = conn.cursor()            
             txhash_txs = fetch_contract_transactions_1(contractName, contractAddress, transactionHash)
