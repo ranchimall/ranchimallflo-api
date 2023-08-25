@@ -472,8 +472,17 @@ def fetch_contract_transactions(contractName, contractAddress):
     FROM main.contractTransactionHistory AS s 
     INNER JOIN token2db.transactionHistory AS t2 
     ON t2.transactionHash = s.transactionHash''')
-    
-    transactionJsonData = c.fetchall()   
+
+    transactionJsonData = c.fetchall()  
+
+    c.execute(f'''
+        SELECT jsonData, parsedFloData, time, transactionType, sourceFloAddress, destFloAddress, transferAmount, '' AS token 
+        FROM contractTransactionHistory
+        ORDER BY id
+        LIMIT 1;
+    ''')
+    creation_tx = c.fetchall()  
+    transactionJsonData = creation_tx + transactionJsonData
     return transaction_post_processing(transactionJsonData)
 
 
