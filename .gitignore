@@ -9,3 +9,4 @@ py3.8/
 *.db
 *.code-workspace
 *.log
+py*/
