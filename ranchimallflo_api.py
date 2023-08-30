@@ -231,7 +231,7 @@ def fetchContractStatus(contractName, contractAddress):
         return status[0][0]
 
 def extract_ip_op_addresses(transactionJson):
-    sender_address = transactionJson['vin'][0]['addr']
+    sender_address = transactionJson['vin'][0]['addresses'][0]
     receiver_address = None
     for utxo in transactionJson['vout']:
         if utxo['scriptPubKey']['addresses'][0] == sender_address:
@@ -2119,7 +2119,6 @@ async def smartcontracttransactions():
     if contractName is None:
         return jsonify(description='Smart Contract\'s name hasn\'t been passed'), 400
     contractName = contractName.strip().lower()
-    
     contractAddress = request.args.get('contractAddress')
     if contractAddress is None:
         return jsonify(description='Smart Contract\'s address hasn\'t been passed'), 400
@@ -2366,10 +2365,10 @@ async def blocktransactions(blockHash):
     blockJson = blockdetailhelper(blockHash)
     if len(blockJson) != 0:
         blockJson = json.loads(blockJson[0][0])
-        blocktxlist = blockJson['tx']
-        blocktxs = {}
+        blocktxlist = blockJson['txs']
+        blocktxs = []
         for i in range(len(blocktxlist)):
-            temptx = transactiondetailhelper(blocktxlist[i])                        
+            temptx = transactiondetailhelper(blocktxlist[i]['txid'])                        
             transactionJson = json.loads(temptx[0][0])
             parseResult = json.loads(temptx[0][1])
             # blocktxs[blocktxlist[i]] = {
@@ -2377,7 +2376,7 @@ async def blocktransactions(blockHash):
             #     "transactionDetails" : transactionJson
             # }
 
-            blocktxs = {**parseResult , **transactionJson}
+            blocktxs.append({**parseResult , **transactionJson})
             # TODO (CRITICAL): Write conditions to include and filter on chain and offchain transactions
             blocktxs['onChain'] = True
         return jsonify(transactions=blocktxs, blockKeyword=blockHash), 200
