@@ -516,7 +516,6 @@ def fetch_contract_transactions(contractName, contractAddress):
     
     return transaction_post_processing(transactionJsonData)
 
-
 def fetch_swap_contract_transactions(contractName, contractAddress, transactionHash=None):
     sc_file = os.path.join(dbfolder, 'smartContracts', '{}-{}.db'.format(contractName, contractAddress))
     conn = sqlite3.connect(sc_file)
@@ -550,10 +549,47 @@ def fetch_swap_contract_transactions(contractName, contractAddress, transactionH
     transactionJsonData = c.fetchall()   
     return transaction_post_processing(transactionJsonData)
 
-
 def sort_transactions(transactionJsonData):
     transactionJsonData = sorted(transactionJsonData, key=lambda x: x['time'], reverse=True)
     return transactionJsonData
+
+def refresh_committee_list(admin_flo_id, api_url, blocktime):
+    committee_list = []
+    latest_param = 'true'
+    mempool_param = 'false'
+    init_id = None
+
+    def process_transaction(transaction_info):
+        if 'isCoinBase' in transaction_info or transaction_info['vin'][0]['addresses'][0] != admin_flo_id or transaction_info['blocktime'] > blocktime:
+            return
+        try:
+            tx_flodata = json.loads(transaction_info['floData'])
+            committee_list.extend(process_committee_flodata(tx_flodata))
+        except:
+            pass
+
+    def send_api_request(url):
+        response = requests.get(url, verify=API_VERIFY)
+        if response.status_code == 200:
+            return response.json()
+        else:
+            print('Response from the Flosight API failed')
+            sys.exit(0)
+
+    url = f'{api_url}api/v1/address/{admin_flo_id}?details=txs'
+    response = send_api_request(url)
+    for transaction_info in response.get('txs', []):
+        process_transaction(transaction_info)
+
+    while 'incomplete' in response:
+        url = f'{api_url}api/v1/address/{admin_flo_id}/txs?latest={latest_param}&mempool={mempool_param}&before={init_id}'
+        response = send_api_request(url)
+        for transaction_info in response.get('items', []):
+            process_transaction(transaction_info)
+        if 'incomplete' in response:
+            init_id = response['initItem']
+
+    return committee_list
 
 
 @app.route('/')
@@ -1948,7 +1984,14 @@ async def getcontractparticipants_v2():
                 result = c.fetchall()
                 returnval = []
                 for row in result:
-                    participation = {'participantFloAddress': row[1], 'tokenAmount': row[2], 'userChoice': row[3], 'transactionHash': row[4], 'winningAmount': row[5], 'tokenIdentification': token}
+                    # Check value of winning amount
+                    c.execute(f'SELECT winningAmount FROM contractwinners WHERE referenceTxHash="{row[4]}"')
+                    participant_winningAmount = c.fetchall()
+                    if participant_winningAmount != []:
+                        participant_winningAmount = participant_winningAmount[0][0]
+                    else:
+                        participant_winningAmount = 0
+                    participation = {'participantFloAddress': row[1], 'tokenAmount': row[2], 'userChoice': row[3], 'transactionHash': row[4], 'winningAmount': participant_winningAmount, 'tokenIdentification': token}
                     returnval.append(participation)
             else:
                 c.execute('SELECT id, participantAddress, tokenAmount, userChoice, transactionHash FROM contractparticipants')
