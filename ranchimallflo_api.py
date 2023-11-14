@@ -19,6 +19,7 @@ import pyflo
 from operator import itemgetter
 import pdb
 import ast
+import time
 
 
 app = Quart(__name__)
@@ -96,7 +97,7 @@ def transactiondetailhelper(transactionHash):
     return transactionJsonData
 
 def update_transaction_confirmations(transactionJson):
-    url = f"{apiUrl}tx/{transactionJson['txid']}"
+    url = f"{apiUrl}api/v1/tx/{transactionJson['txid']}"
     response = requests.get(url)
     if response.status_code == 200:
         response_data = response.json()
@@ -122,6 +123,8 @@ def smartcontract_morph_helper(smart_contracts):
                 if 'oracle_address' in contractStructure.keys():
                     contractDict['oracle_address'] = contractStructure['oracle_address']
                     contractDict['price'] = fetch_dynamic_swap_price(contractStructure, {'time': datetime.now().timestamp()})
+            else:
+                contractDict['price'] = contractStructure['price']
         elif contractDict['contractType'] == 'one-time-event':
             contractDict['tokenIdentification'] = contract[4]
             # pull the contract structure
@@ -276,7 +279,7 @@ def fetch_dynamic_swap_price(contractStructure, blockinfo):
     # find the first contract transaction which adheres to price change format
     # {"price-update":{"contract-name": "", "contract-address": "", "price": 3}}
     print(f'oracle address is : {oracle_address}')
-    response = requests.get(f'{apiUrl}addr/{oracle_address}')
+    response = requests.get(f'{apiUrl}api/v1/addr/{oracle_address}')
     if response.status_code == 200:
         response = response.json()
         if 'transactions' not in response.keys(): # API doesn't return 'transactions' key, if 0 txs present on address
@@ -284,7 +287,7 @@ def fetch_dynamic_swap_price(contractStructure, blockinfo):
         else:
             transactions = response['transactions']
             for transaction_hash in transactions:
-                transaction_response = requests.get(f'{apiUrl}tx/{transaction_hash}')
+                transaction_response = requests.get(f'{apiUrl}api/v1/tx/{transaction_hash}')
                 if transaction_response.status_code == 200:
                     transaction = transaction_response.json()
                     floData = transaction['floData']
@@ -544,7 +547,10 @@ def fetch_swap_contract_transactions(contractName, contractAddress, transactionH
     '''if transactionHash:
         query += f" WHERE s.transactionHash = '{transactionHash}'"'''
     
-    c.execute(query)
+    try:
+        c.execute(query)
+    except:
+        pass
     
     transactionJsonData = c.fetchall()   
     return transaction_post_processing(transactionJsonData)
@@ -552,6 +558,27 @@ def fetch_swap_contract_transactions(contractName, contractAddress, transactionH
 def sort_transactions(transactionJsonData):
     transactionJsonData = sorted(transactionJsonData, key=lambda x: x['time'], reverse=True)
     return transactionJsonData
+
+def process_committee_flodata(flodata):
+    flo_address_list = []
+    try:
+        contract_committee_actions = flodata['token-tracker']['contract-committee']
+    except KeyError:
+        print('Flodata related to contract committee')
+    else:
+        # Adding first and removing later to maintain consistency and not to depend on floData for order of execution
+        for action in contract_committee_actions.keys():
+            if action == 'add':
+                for floid in contract_committee_actions[f'{action}']:
+                    flo_address_list.append(floid)
+
+        for action in contract_committee_actions.keys():
+            if action == 'remove':
+                for floid in contract_committee_actions[f'{action}']:
+                    flo_address_list.remove(floid)
+    finally:
+        return flo_address_list
+
 
 def refresh_committee_list(admin_flo_id, api_url, blocktime):
     committee_list = []
@@ -823,8 +850,7 @@ async def getAddressBalance():
                         tempdict = {}
                         conn = sqlite3.connect(dblocation)
                         c = conn.cursor()
-                        c.execute(
-                            'SELECT SUM(transferBalance) FROM activeTable WHERE address="{}"'.format(floAddress))
+                        c.execute('SELECT SUM(transferBalance) FROM activeTable WHERE address="{}"'.format(floAddress))
                         balance = c.fetchall()[0][0]
                         tempdict['balance'] = balance
                         tempdict['token'] = token
@@ -1527,11 +1553,11 @@ async def getblocktransactions(blockdetail):
 @app.route('/api/v1.0/categoriseString/<urlstring>')
 async def categoriseString(urlstring):
     # check if the hash is of a transaction
-    response = requests.get('{}tx/{}'.format(apiUrl, urlstring))
+    response = requests.get('{}api/v1/tx/{}'.format(apiUrl, urlstring))
     if response.status_code == 200:
         return jsonify(type='transaction')
     else:
-        response = requests.get('{}block/{}'.format(apiUrl, urlstring))
+        response = requests.get('{}api/v1/block/{}'.format(apiUrl, urlstring))
         if response.status_code == 200:
             return jsonify(type='block')
         else:
@@ -1879,7 +1905,10 @@ async def getContractList_v2():
     smart_contracts = return_smart_contracts(c, contractName, contractAddress)
     smart_contracts_morphed = smartcontract_morph_helper(smart_contracts)
     conn.close()
-    return jsonify(smartContracts=smart_contracts_morphed), 200
+
+    committeeAddressList = refresh_committee_list(APP_ADMIN, apiUrl, int(time.time()))
+
+    return jsonify(smartContracts=smart_contracts_morphed, smartContractCommittee=committeeAddressList), 200
 
 
 @app.route('/api/v2/smartContractInfo', methods=['GET'])
@@ -1903,8 +1932,13 @@ async def getContractInfo_v2():
         # Categorize into what type of contract it is right now 
         if contractStructure['contractType'] == 'continuos-event' and contractStructure['subtype'] == 'tokenswap':
             conn, c = create_database_connection('smart_contract', {'contract_name': contractName, 'contract_address': contractAddress})
+
             c.execute('SELECT COUNT(participantAddress), SUM(tokenAmount), SUM(winningAmount) FROM contractparticipants')
             participation_details = c.fetchall()
+
+            c.execute('SELECT depositAmount FROM contractdeposits')
+            deposit_details = c.fetchall()
+
             returnval['numberOfParticipants'] = participation_details[0][0]
             returnval['totalParticipationAmount'] = participation_details[0][1]
             returnval['totalHonorAmount'] = participation_details[0][2]
@@ -2459,11 +2493,11 @@ async def blocktransactions(blockHash):
 @app.route('/api/v2/categoriseString/<urlstring>')
 async def categoriseString_v2(urlstring):
     # check if the hash is of a transaction
-    response = requests.get('{}tx/{}'.format(apiUrl, urlstring))
+    response = requests.get('{}api/v1/tx/{}'.format(apiUrl, urlstring))
     if response.status_code == 200:
         return jsonify(type='transaction'), 200
     else:
-        response = requests.get('{}block/{}'.format(apiUrl, urlstring))
+        response = requests.get('{}api/v1/block/{}'.format(apiUrl, urlstring))
         if response.status_code == 200:
             return jsonify(type='block'), 200
         else:
@@ -2510,7 +2544,9 @@ async def tokenSmartContractList():
     smart_contracts = return_smart_contracts(c, contractName, contractAddress)
     smart_contracts_morphed = smartcontract_morph_helper(smart_contracts)
     conn.close()
-    return jsonify(tokens=filelist, smartContracts=smart_contracts_morphed), 200
+
+    committeeAddressList = refresh_committee_list(APP_ADMIN, apiUrl, int(time.time()))
+    return jsonify(tokens=filelist, smartContracts=smart_contracts_morphed, smartContractCommittee=committeeAddressList), 200
 
 
 class ServerSentEvent:
