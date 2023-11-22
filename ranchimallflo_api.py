@@ -21,7 +21,6 @@ import pdb
 import ast
 import time
 
-
 app = Quart(__name__)
 app.clients = set()
 app = cors(app, allow_origin="*")
@@ -459,7 +458,7 @@ def fetch_token_transactions(token, senderFloAddress=None, destFloAddress=None, 
     conn.close()
     return transaction_post_processing(transactionJsonData)
 
-def fetch_contract_transactions(contractName, contractAddress):
+def fetch_contract_transactions(contractName, contractAddress, _from=0, to=100):
     sc_file = os.path.join(dbfolder, 'smartContracts', '{}-{}.db'.format(contractName, contractAddress))
     conn = sqlite3.connect(sc_file)
     c = conn.cursor()
@@ -473,8 +472,8 @@ def fetch_contract_transactions(contractName, contractAddress):
         token2_file = f"{dbfolder}/tokens/{token2}.db"
         conn.execute(f"ATTACH DATABASE '{token1_file}' AS token1db")
         conn.execute(f"ATTACH DATABASE '{token2_file}' AS token2db")
-        # Get data from db
-        c.execute(f'''
+
+        transaction_query = f'''
         SELECT t1.jsonData, t1.parsedFloData, t1.time, t1.transactionType, t1.sourceFloAddress, t1.destFloAddress, t1.transferAmount, '{token1}' AS token, s.transactionSubType  
         FROM main.contractTransactionHistory AS s 
         INNER JOIN token1db.transactionHistory AS t1 
@@ -483,41 +482,46 @@ def fetch_contract_transactions(contractName, contractAddress):
         SELECT t2.jsonData, t2.parsedFloData, t2.time, t2.transactionType, t2.sourceFloAddress, t2.destFloAddress, t2.transferAmount, '{token2}' AS token, s.transactionSubType 
         FROM main.contractTransactionHistory AS s 
         INNER JOIN token2db.transactionHistory AS t2 
-        ON t2.transactionHash = s.transactionHash''')
+        ON t2.transactionHash = s.transactionHash 
+        WHERE s.id BETWEEN {_from} AND {to}
+        '''
 
-        transactionJsonData = c.fetchall()  
-        c.execute(f'''
-            SELECT jsonData, parsedFloData, time, transactionType, sourceFloAddress, destFloAddress, transferAmount, '' AS token, transactionSubType 
-            FROM contractTransactionHistory
-            ORDER BY id
-            LIMIT 1;
-        ''')
-        creation_tx = c.fetchall() 
-        transactionJsonData = creation_tx + transactionJsonData
-    
+        creation_tx_query = '''
+        SELECT jsonData, parsedFloData, time, transactionType, sourceFloAddress, destFloAddress, transferAmount, '' AS token, transactionSubType 
+        FROM contractTransactionHistory
+        ORDER BY id
+        LIMIT 1;
+        '''
+
     elif contractStructure['contractType'] == 'one-time-event':
-        #if contractStructure['subtype'] == 'time-trigger' and contractStructure['subtype'] == 'external-trigger':
         token1 = contractStructure['tokenIdentification']
         token1_file = f"{dbfolder}/tokens/{token1}.db"
         conn.execute(f"ATTACH DATABASE '{token1_file}' AS token1db")
-        # Get data from db
-        c.execute(f'''
+
+        transaction_query = f'''
         SELECT t1.jsonData, t1.parsedFloData, t1.time, t1.transactionType, t1.sourceFloAddress, t1.destFloAddress, t1.transferAmount, '{token1}' AS token, s.transactionSubType 
         FROM main.contractTransactionHistory AS s 
         INNER JOIN token1db.transactionHistory AS t1 
-        ON t1.transactionHash = s.transactionHash''')
+        ON t1.transactionHash = s.transactionHash 
+        WHERE s.id BETWEEN {_from} AND {to}
+        '''
 
-        transactionJsonData = c.fetchall()  
-        c.execute(f'''
-            SELECT jsonData, parsedFloData, time, transactionType, sourceFloAddress, destFloAddress, transferAmount, '' AS token, transactionSubType 
-            FROM contractTransactionHistory
-            ORDER BY id
-            LIMIT 1;
-        ''')
-        creation_tx = c.fetchall()  
-        transactionJsonData = creation_tx + transactionJsonData
-    
+        creation_tx_query = '''
+        SELECT jsonData, parsedFloData, time, transactionType, sourceFloAddress, destFloAddress, transferAmount, '' AS token, transactionSubType 
+        FROM contractTransactionHistory
+        ORDER BY id
+        LIMIT 1;
+        '''
+
+    c.execute(transaction_query)
+    transactionJsonData = c.fetchall()
+
+    c.execute(creation_tx_query)
+    creation_tx = c.fetchall()
+    transactionJsonData = creation_tx + transactionJsonData
+
     return transaction_post_processing(transactionJsonData)
+
 
 def fetch_swap_contract_transactions(contractName, contractAddress, transactionHash=None):
     sc_file = os.path.join(dbfolder, 'smartContracts', '{}-{}.db'.format(contractName, contractAddress))
@@ -1647,7 +1651,6 @@ async def broadcastTx_v2(raw_transaction_hash):
 
 
 # FLO TOKEN APIs
-
 @app.route('/api/v2/tokenList', methods=['GET'])
 async def tokenList():
     filelist = []
@@ -1711,6 +1714,14 @@ async def tokenTransactions(token):
     use_AND = request.args.get('use_AND')
     if use_AND is not None and use_AND not in [True, False]:
         return jsonify(description='use_AND validation failed'), 400
+    
+    _from = int(request.args.get('_from', 1))  # Get page number, default is 1
+    to = int(request.args.get('to', 100))  # Get limit, default is 10
+
+    if _from<1:
+        return jsonify(description='_from validation failed'), 400
+    if to<1:
+        return jsonify(description='to validation failed'), 400
     
     filelocation = os.path.join(dbfolder, 'tokens', f'{token}.db')
 
@@ -2008,7 +2019,7 @@ async def getcontractparticipants_v2():
         # Make db connection and fetch data
         contractStructure = fetchContractStructure(contractName, contractAddress)
         contractStatus = fetchContractStatus(contractName, contractAddress)
-        conn, c = create_database_connection('smart_contract', {'contract_name': contractName, 'contract_address': contractAddress})        
+        conn, c = create_database_connection('smart_contract', {'contract_name': contractName, 'contract_address': contractAddress})
         if 'exitconditions' in contractStructure:
             # contract is of the type external trigger
             # check if the contract has been closed
@@ -2236,16 +2247,20 @@ async def smartcontracttransactions():
     if not check_flo_address(contractAddress, is_testnet):
         return jsonify(description='contractAddress validation failed'), 400
     
-    limit = request.args.get('limit')
-    if limit is not None and not check_integer(limit):
-        return jsonify(description='limit validation failed'), 400
+    _from = int(request.args.get('_from', 1))  # Get page number, default is 1
+    to = int(request.args.get('to', 100))  # Get limit, default is 10
+
+    if _from<1:
+        return jsonify(description='_from validation failed'), 400
+    if to<1:
+        return jsonify(description='to validation failed'), 400
     
     contractDbName = '{}-{}.db'.format(contractName, contractAddress)
     filelocation = os.path.join(dbfolder, 'smartContracts', contractDbName)
 
     if os.path.isfile(filelocation):
         # Make db connection and fetch data
-        transactionJsonData = fetch_contract_transactions(contractName, contractAddress)
+        transactionJsonData = fetch_contract_transactions(contractName, contractAddress, _from, to)
         transactionJsonData = sort_transactions(transactionJsonData)
         return jsonify(contractName=contractName, contractAddress=contractAddress, contractTransactions=transactionJsonData), 200
     else:
