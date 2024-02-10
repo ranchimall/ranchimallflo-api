@@ -1646,7 +1646,7 @@ async def info():
 
 @app.route('/api/v2/broadcastTx/<raw_transaction_hash>')
 async def broadcastTx_v2(raw_transaction_hash):
-    p1 = subprocess.run(['flo-cli',f"-datadir={FLO_DATA_DIR}",'sendrawtransaction',raw_transaction_hash], capture_output=True)
+    p1 = subprocess.run(['flo-cli','sendrawtransaction',raw_transaction_hash], capture_output=True)
     return jsonify(args=p1.args,returncode=p1.returncode,stdout=p1.stdout.decode(),stderr=p1.stderr.decode()), 200
 
 
@@ -2063,14 +2063,14 @@ async def getcontractparticipants_v2():
             returnval = []
             for row in contract_participants:
                 participation = {
-                                        'participantFloAddress': row[1], 
-                                        'participationAmount': row[2], 
-                                        'swapPrice': float(row[3]),
-                                        'transactionHash': row[4],
-                                        'blockNumber': row[5],
-                                        'blockHash': row[6],
-                                        'swapAmount': row[7]
-                                    }
+                                    'participantFloAddress': row[1], 
+                                    'participationAmount': row[2], 
+                                    'swapPrice': float(row[3]),
+                                    'transactionHash': row[4],
+                                    'blockNumber': row[5],
+                                    'blockHash': row[6],
+                                    'swapAmount': row[7]
+                                }
                 returnval.append(participation)
             conn.close()
             return jsonify(contractName=contractName, contractAddress=contractAddress, contractType=contractStructure['contractType'], contractSubtype=contractStructure['subtype'], participantInfo=returnval), 200
@@ -2087,14 +2087,20 @@ async def participantDetails(floAddress):
     
     contractName = request.args.get('contractName')
     contractAddress = request.args.get('contractAddress')
-    
-    if contractAddress is not None and not check_flo_address(contractAddress, is_testnet):
-        return jsonify(description='contractAddress validation failed'), 400
-    contractAddress = contractAddress.strip()
 
-    if (contractName and contractAddress is None) or (contractName is None and contractAddress):
-        return jsonify(description='pass both, contractName and contractAddress as url parameters'), 400
+    # Url param checking
+    if contractName is None and contractAddress is None:
+        return jsonify(description='Pass both, contractName and contractAddress as url parameters'), 400
+    elif contractName is None:
+        return jsonify(description='Pass contractName as url parameter'), 400
+    else:
+        return jsonify(description='Pass contractAddress as url parameter'), 400
+    
+    if not check_flo_address(contractAddress, is_testnet):
+        return jsonify(description='contractAddress validation failed'), 400
+    
     contractName = contractName.strip().lower()
+    contractAddress = contractAddress.strip()
 
     systemdb_location = os.path.join(dbfolder, 'system.db')
     if os.path.isfile(systemdb_location):
