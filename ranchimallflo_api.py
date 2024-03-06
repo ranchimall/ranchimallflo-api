@@ -278,39 +278,38 @@ def fetch_dynamic_swap_price(contractStructure, blockinfo):
     # find the first contract transaction which adheres to price change format
     # {"price-update":{"contract-name": "", "contract-address": "", "price": 3}}
     print(f'oracle address is : {oracle_address}')
-    response = requests.get(f'{apiUrl}api/v1/addr/{oracle_address}')
+    response = requests.get(f'{apiUrl}api/v1/address/{oracle_address}?details=txs')
     if response.status_code == 200:
         response = response.json()
-        if 'transactions' not in response.keys(): # API doesn't return 'transactions' key, if 0 txs present on address
+        if 'txs' not in response.keys(): # API doesn't return 'transactions' key, if 0 txs present on address
             return float(contractStructure['price'])
         else:
-            transactions = response['transactions']
-            for transaction_hash in transactions:
-                transaction_response = requests.get(f'{apiUrl}api/v1/tx/{transaction_hash}')
-                if transaction_response.status_code == 200:
-                    transaction = transaction_response.json()
-                    floData = transaction['floData']
-                    # If the blocktime of the transaction is < than the current block time
-                    if transaction['time'] < blockinfo['time']:
-                        # Check if flodata is in the format we are looking for
-                        # ie. {"price-update":{"contract-name": "", "contract-address": "", "price": 3}}
-                        # and receiver address should be contractAddress
-                        try:
-                            sender_address, receiver_address = find_sender_receiver(transaction)
-                            assert receiver_address == contractStructure['contractAddress']
-                            assert sender_address == oracle_address
-                            floData = json.loads(floData)
-                            # Check if the contract name and address are right
-                            assert floData['price-update']['contract-name'] == contractStructure['contractName']
-                            assert floData['price-update']['contract-address'] == contractStructure['contractAddress']
-                            return float(floData['price-update']['price'])
-                        except:
-                            continue
-                    else:
+            transactions = response['txs']
+            for transaction in transactions:
+                #transaction_response = requests.get(f'{apiUrl}api/v1/tx/{transaction_hash}')
+                # if transaction_response.status_code == 200:
+                floData = transaction['floData']
+                # If the blocktime of the transaction is < than the current block time
+                if transaction['time'] < blockinfo['time']:
+                    # Check if flodata is in the format we are looking for
+                    # ie. {"price-update":{"contract-name": "", "contract-address": "", "price": 3}}
+                    # and receiver address should be contractAddress
+                    try:
+                        sender_address, receiver_address = find_sender_receiver(transaction)
+                        assert receiver_address == contractStructure['contractAddress']
+                        assert sender_address == oracle_address
+                        floData = json.loads(floData)
+                        # Check if the contract name and address are right
+                        assert floData['price-update']['contract-name'] == contractStructure['contractName']
+                        assert floData['price-update']['contract-address'] == contractStructure['contractAddress']
+                        return float(floData['price-update']['price'])
+                    except:
                         continue
                 else:
-                    print('API error while fetch_dynamic_swap_price')
-                    return None
+                    continue
+                # else:
+                #     print('API error while fetch_dynamic_swap_price')
+                #     return None
             return float(contractStructure['price'])
     else:
         print('API error while fetch_dynamic_swap_price')
@@ -326,7 +325,7 @@ def find_sender_receiver(transaction_data):
 
     # todo Rule 40 - For each vin, find the feeding address and the fed value. Make an inputlist containing [inputaddress, n value]
     for vin in transaction_data["vin"]:
-        vinlist.append([vin["addr"], float(vin["value"])])
+        vinlist.append([vin["addresses"][0], float(vin["value"])])
 
     totalinputval = float(transaction_data["valueIn"])
 
@@ -355,7 +354,7 @@ def find_sender_receiver(transaction_data):
     addresscounter = 0
     inputcounter = 0
     for obj in transaction_data["vout"]:
-        if obj["scriptPubKey"]["type"] == "pubkeyhash":
+        if obj["scriptPubKey"]["isAddress"] == True:
             addresscounter = addresscounter + 1
             if inputlist[0] == obj["scriptPubKey"]["addresses"][0]:
                 inputcounter = inputcounter + 1
