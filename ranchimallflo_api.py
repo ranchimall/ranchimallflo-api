@@ -2656,7 +2656,7 @@ if not os.path.isfile(f"system.db"):
 
 # assign a scheduler for updating prices in the background
 scheduler = BackgroundScheduler()
-scheduler.add_job(func=updatePrices, trigger="interval", seconds=600)
+scheduler.add_job(func=updatePrices, trigger="interval", seconds=7200)
 scheduler.start()
 # Shut down the scheduler when exiting the app
 atexit.register(lambda: scheduler.shutdown())
